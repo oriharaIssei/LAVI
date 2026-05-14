@@ -1,0 +1,19 @@
+#pragma once
+#include "system/ISystem.h"
+
+///====================================================================
+// Title
+///====================================================================
+class SystemTemplate
+    : public ISystem {
+public:
+    SystemTemplate() : ISystem(SystemType::Input /* 該当するSystemType */) {}
+    ~SystemTemplate() {}
+
+    void Initialize() override; // 必須
+    //void Update(); // 必要なら
+    void Finalize() override; // 必須
+
+protected:
+    void UpdateEntity(GameEntity* _entity)override;// 必須
+};

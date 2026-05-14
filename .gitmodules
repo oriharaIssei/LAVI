@@ -1,0 +1,7 @@
+# Engine は setup.ps1 実行時に追加されます。
+# 手動で追加する場合は下記を参考にしてください。
+#
+# [submodule "project/engine"]
+#     path = project/engine
+#     url = https://github.com/<user>/Engine.git
+#     branch = main

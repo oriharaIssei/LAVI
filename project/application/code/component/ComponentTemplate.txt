@@ -1,0 +1,21 @@
+#pragma once
+
+#include "component/IComponent.h"
+
+///====================================================================
+// Title
+///====================================================================
+class ComponentTemplate
+    : public IComponent {
+public:
+    ComponentTemplate();
+   ~ComponentTemplate();
+
+    void Initialize(GameEntity* _entity)override; // 必須
+
+    bool Edit()                      // 必須;
+    void Save(BinaryWriter& _writer) // 必須;
+    void Load(BinaryReader& _reader) // 必須;
+
+    void Finalize() // 必須;
+};

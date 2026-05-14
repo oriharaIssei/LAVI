@@ -1,0 +1,31 @@
+# Build artifacts
+/generated/
+
+# AssetCooker 成果物 (resource/ から生成されるのでローカル管理)
+/project/application/cookedResource/
+/project/*.sln
+/project/*.slnx
+/project/*.vcxproj
+/project/*.vcxproj.*
+/project/application/*.vcxproj
+/project/application/*.vcxproj.*
+/project/application/imgui.ini
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# ExeFile 出力
+/ExeFile/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+
+# Premake (engine submodule 側にあるのでローカルに置かれた場合のみ)
+/project/config/premake5.exe
