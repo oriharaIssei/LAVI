@@ -1,5 +1,5 @@
 -- ==========================================================================
--- __APP_NAME__ Workspace Premake5 Script
+-- OriGineDev Workspace Premake5 Script
 -- ==========================================================================
 -- このファイルはテンプレートから生成されています。
 -- - Application 固有の premake 記述のみをここに書く
@@ -15,10 +15,10 @@ os.chdir(_SCRIPT_DIR .. "/..")
 --     defineEngineProjects() / getEngineIncludeDirs() / getEngineLinks() を export する
 include "engine/premake.lua"
 
-workspace "__APP_NAME__"
+workspace "OriGineDev"
     architecture "x86_64"
     configurations { "Debug", "Develop", "Release" }
-    startproject "__APP_NAME__"
+    startproject "OriGineDev"
 
 -- ==========================================================================
 -- Engine Projects (Engine 側の premake.lua が定義する)
@@ -28,12 +28,12 @@ defineEngineProjects()
 -- ==========================================================================
 -- Application Project
 -- ==========================================================================
-project "__APP_NAME__"
+project "OriGineDev"
     kind "WindowedApp"
     language "C++"
     location "application"
     targetdir "../generated/output/%{cfg.buildcfg}/"
-    objdir "../generated/obj/%{cfg.buildcfg}/__APP_NAME__/"
+    objdir "../generated/obj/%{cfg.buildcfg}/OriGineDev/"
     debugdir "%{wks.location}"
     files { "application/**.h", "application/**.cpp" }
 
