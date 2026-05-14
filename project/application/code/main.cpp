@@ -9,8 +9,8 @@
 #include "engine/code/directX12/DxDebug.h"
 
 /// FrameWorks
-#include "application/code/__APP_NAME__Editor.h"
-#include "application/code/__APP_NAME__Game.h"
+#include "application/code/OriGineDevEditor.h"
+#include "application/code/OriGineDevGame.h"
 #include "FrameWork.h"
 
 /// externals
@@ -30,9 +30,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     std::unique_ptr<FrameWork> application = nullptr;
 
 #if defined(DEBUG) || defined(DEBUG_REPLAY)
-    application = std::make_unique<__APP_NAME__Editor>();
+    application = std::make_unique<OriGineDevEditor>();
 #else
-    application = std::make_unique<__APP_NAME__Game>();
+    application = std::make_unique<OriGineDevGame>();
 #endif
 
     application->Initialize(cmdLines);
