@@ -25,6 +25,8 @@ void OriGineDevGame::Initialize(const std::vector<std::string>& _commandLines) {
 
     RegisterUsingComponents();
     RegisterUsingSystems();
+
+    ApplyWindowSettings();
 }
 
 void OriGineDevGame::Finalize() {
@@ -33,11 +35,18 @@ void OriGineDevGame::Finalize() {
 }
 
 void OriGineDevGame::Run() {
-    // TODO: メインループを実装
     while (!isEndRequest_) {
+        if (engine_->ProcessMessage()) {
+            isEndRequest_ = true;
+            break;
+        }
+
         engine_->BeginFrame();
         // sceneManager_->Update();
-        // sceneManager_->Draw();
         engine_->EndFrame();
+
+        engine_->ScreenPreDraw();
+        // sceneManager_->Draw();
+        engine_->ScreenPostDraw();
     }
 }

@@ -1,0 +1,21 @@
+{
+    "WindowState": {
+        "BackgroundAlpha": 0,
+        "BackgroundTransparent": true,
+        "ClearColorA": 0.0,
+        "ClearColorB": 0.0,
+        "ClearColorG": 0.0,
+        "ClearColorR": 0.0,
+        "ClickThrough": true,
+        "Height": 720,
+        "Mode": 1,
+        "MonitorIndex": 0,
+        "PosX": 0,
+        "PosY": 0,
+        "ResizeMode": 2,
+        "ShowTitleBar": true,
+        "TransparencyColorKey": 0,
+        "UseTransparencyColorKey": true,
+        "Width": 1280
+    }
+}

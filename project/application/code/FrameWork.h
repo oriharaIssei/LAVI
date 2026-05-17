@@ -18,6 +18,8 @@ public:
     virtual void Run()                                                     = 0;
 
 protected:
+    void ApplyWindowSettings();
+
     bool isEndRequest_                   = false;
     OriGine::Engine* engine_             = nullptr;
     OriGine::GlobalVariables* variables_ = nullptr;

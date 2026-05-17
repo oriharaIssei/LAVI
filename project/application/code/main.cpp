@@ -6,11 +6,11 @@
 
 /// engine
 // directX12
-#include "engine/code/directX12/DxDebug.h"
+#include "directX12/DxDebug.h"
 
 /// FrameWorks
-#include "application/code/OriGineDevEditor.h"
-#include "application/code/OriGineDevGame.h"
+#include "OriGineDevEditor.h"
+#include "OriGineDevGame.h"
 #include "FrameWork.h"
 
 /// externals
