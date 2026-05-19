@@ -12,47 +12,44 @@
 #include "directX12/DxSwapChain.h"
 #include "globalVariables/GlobalVariables.h"
 
+/// application systems
+#include "system/MediaCaptureDemoSystem.h"
+
 using namespace OriGine;
 
 FrameWork::FrameWork()  = default;
 FrameWork::~FrameWork() = default;
 
-void FrameWork::ApplyWindowSettings() {
-#ifdef _DEBUG
-    return;
+void FrameWork::ApplyWindowSettings(){
+#ifndef _DEBUG
+	GlobalVariables* gv = GlobalVariables::GetInstance();
+	auto* scene = gv->GetScene("Settings");
+	if(!scene){
+		return;
+	}
+	auto groupItr = scene->find("WindowState");
+	if(groupItr == scene->end()){
+		return;
+	}
+
+	float r = *gv->AddValue<float>("Settings","WindowState","ClearColorR",0.0f);
+	float g = *gv->AddValue<float>("Settings","WindowState","ClearColorG",0.0f);
+	float b = *gv->AddValue<float>("Settings","WindowState","ClearColorB",0.0f);
+	float a = *gv->AddValue<float>("Settings","WindowState","ClearColorA",0.0f);
+	Engine::GetInstance()->GetDxSwapChain()->SetClearColor(Vec4f(r,g,b,a));
 #endif
-
-    GlobalVariables* gv = GlobalVariables::GetInstance();
-    auto* scene = gv->GetScene("Settings");
-    if (!scene) {
-        return;
-    }
-    auto groupItr = scene->find("WindowState");
-    if (groupItr == scene->end()) {
-        return;
-    }
-
-    float r = *gv->AddValue<float>("Settings", "WindowState", "ClearColorR", 0.0f);
-    float g = *gv->AddValue<float>("Settings", "WindowState", "ClearColorG", 0.0f);
-    float b = *gv->AddValue<float>("Settings", "WindowState", "ClearColorB", 0.0f);
-    float a = *gv->AddValue<float>("Settings", "WindowState", "ClearColorA", 0.0f);
-    Engine::GetInstance()->GetDxSwapChain()->SetClearColor(Vec4f(r, g, b, a));
 }
 
-void RegisterUsingComponents() {
-    ComponentRegistry* componentRegistry = ComponentRegistry::GetInstance();
-    (void)componentRegistry;
+void RegisterUsingComponents(){
+	ComponentRegistry* componentRegistry = ComponentRegistry::GetInstance();
 
-    // TODO: アプリ固有のコンポーネントを登録
-    // 例:
-    // componentRegistry->RegisterComponent<Transform>();
+	componentRegistry->RegisterComponent<Transform>();
+	componentRegistry->RegisterComponent<CameraTransform>();
 }
 
-void RegisterUsingSystems() {
-    SystemRegistry* systemRegistry = SystemRegistry::GetInstance();
-    (void)systemRegistry;
+void RegisterUsingSystems(){
+	SystemRegistry* systemRegistry = SystemRegistry::GetInstance();
 
-    // TODO: アプリ固有のシステムを登録
-    // 例:
-    // systemRegistry->RegisterSystem<MoveSystem>();
+	systemRegistry->RegisterSystem<CameraInitialize>();
+	systemRegistry->RegisterSystem<MediaCaptureDemoSystem>();
 }

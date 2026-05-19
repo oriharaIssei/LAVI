@@ -1,0 +1,24 @@
+{
+    "CategoryActivity": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+    ],
+    "Systems": [
+        {
+            "CameraInitialize": {
+                "Priority": 0
+            }
+        },
+        {
+            "MediaCaptureDemoSystem": {
+                "Priority": 0
+            }
+        }
+    ]
+}

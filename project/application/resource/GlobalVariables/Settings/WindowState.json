@@ -1,5 +1,6 @@
 {
     "WindowState": {
+        "AllowFullscreenToggle": true,
         "BackgroundAlpha": 0,
         "BackgroundTransparent": true,
         "ClearColorA": 0.0,
@@ -8,7 +9,7 @@
         "ClearColorR": 0.0,
         "ClickThrough": true,
         "Height": 720,
-        "Mode": 1,
+        "Mode": 0,
         "MonitorIndex": 0,
         "PosX": 0,
         "PosY": 0,
