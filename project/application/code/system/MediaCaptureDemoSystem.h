@@ -61,6 +61,9 @@ private:
     void DrawVoiceVoxPanel();
     void DrawVisionPanel();
 
+    void LoadApiConfig();
+    void SaveApiConfig();
+
     bool CreatePreviewTexture(PreviewTexture &preview, uint32_t width, uint32_t height);
     void UploadPreviewFrame(PreviewTexture &preview, const uint8_t *data, uint32_t dataSize, uint32_t width, uint32_t height);
 

@@ -21,6 +21,7 @@
 
 /// math
 #include <cmath>
+#include <fstream>
 
 namespace
 {
@@ -110,6 +111,8 @@ void MediaCaptureDemoSystem::Initialize()
 				transcriber_->PushAudio(data, frameCount, channels, microphone_->GetFormat().sampleRate);
 			}
 		});
+
+	LoadApiConfig();
 }
 
 void MediaCaptureDemoSystem::Finalize()
@@ -846,6 +849,12 @@ void MediaCaptureDemoSystem::DrawVisionPanel()
 			}
 			return 0; }, &visionApiKey_);
 
+	ImGui::SameLine();
+	if (ImGui::Button("Save"))
+	{
+		SaveApiConfig();
+	}
+
 	// Prompt input
 	ImGui::InputTextMultiline("Prompt", visionPrompt_.data(), visionPrompt_.capacity() + 1, ImVec2(-1, 60), ImGuiInputTextFlags_CallbackResize, [](ImGuiInputTextCallbackData *data) -> int
 							  {
@@ -946,4 +955,43 @@ void MediaCaptureDemoSystem::DrawVisionPanel()
 	ImGui::Separator();
 	ImGui::Text("Result:");
 	ImGui::TextWrapped("%s", visionResult_.empty() ? "(no result)" : visionResult_.c_str());
+}
+
+static const char *kApiConfigPath = "application/resource/api_config.json";
+
+void MediaCaptureDemoSystem::LoadApiConfig()
+{
+	std::ifstream ifs(kApiConfigPath);
+	if (!ifs.is_open())
+	{
+		return;
+	}
+	std::string json((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+
+	auto extractValue = [&](const std::string &key) -> std::string
+	{
+		std::string search = "\"" + key + "\":\"";
+		auto pos = json.find(search);
+		if (pos == std::string::npos)
+			return "";
+		pos += search.size();
+		auto end = json.find('"', pos);
+		if (end == std::string::npos)
+			return "";
+		return json.substr(pos, end - pos);
+	};
+
+	visionApiKey_ = extractValue("vision_api_key");
+}
+
+void MediaCaptureDemoSystem::SaveApiConfig()
+{
+	std::ofstream ofs(kApiConfigPath);
+	if (!ofs.is_open())
+	{
+		return;
+	}
+	ofs << "{\n";
+	ofs << "  \"vision_api_key\": \"" << visionApiKey_ << "\"\n";
+	ofs << "}\n";
 }
