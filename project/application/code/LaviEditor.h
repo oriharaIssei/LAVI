@@ -10,10 +10,10 @@ namespace OriGine {
 	class SceneManager;
 }
 
-class OriGineDevEditor : public FrameWork{
+class LaviEditor : public FrameWork{
 public:
-	OriGineDevEditor();
-	~OriGineDevEditor() override;
+	LaviEditor();
+	~LaviEditor() override;
 
 	void Initialize(const std::vector<std::string>& _commandLines) override;
 	void Finalize() override;

@@ -8,10 +8,10 @@ namespace OriGine {
 class SceneManager;
 }
 
-class OriGineDevGame : public FrameWork {
+class LaviGame : public FrameWork {
 public:
-    OriGineDevGame();
-    ~OriGineDevGame() override;
+    LaviGame();
+    ~LaviGame() override;
 
     void Initialize(const std::vector<std::string>& _commandLines) override;
     void Finalize() override;

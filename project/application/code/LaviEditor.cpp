@@ -1,4 +1,4 @@
-#include "OriGineDevEditor.h"
+#include "LaviEditor.h"
 
 #ifdef _DEBUG
 #define ENGINE_INCLUDE
@@ -15,10 +15,10 @@
 
 using namespace OriGine;
 
-OriGineDevEditor::OriGineDevEditor()  = default;
-OriGineDevEditor::~OriGineDevEditor() = default;
+LaviEditor::LaviEditor()  = default;
+LaviEditor::~LaviEditor() = default;
 
-void OriGineDevEditor::Initialize(const std::vector<std::string>& _commandLines){
+void LaviEditor::Initialize(const std::vector<std::string>& _commandLines){
 	variables_    = GlobalVariables::GetInstance();
 	engine_       = Engine::GetInstance();
 	sceneManager_ = std::make_unique<SceneManager>();
@@ -38,13 +38,13 @@ void OriGineDevEditor::Initialize(const std::vector<std::string>& _commandLines)
 	EditorController::GetInstance()->Initialize();
 }
 
-void OriGineDevEditor::Finalize(){
+void LaviEditor::Finalize(){
 	EditorController::GetInstance()->Finalize();
 	sceneManager_.reset();
 	engine_->Finalize();
 }
 
-void OriGineDevEditor::Run(){
+void LaviEditor::Run(){
 	while(!isEndRequest_){
 		if(engine_->ProcessMessage()){
 			isEndRequest_ = true;

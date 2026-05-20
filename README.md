@@ -1,124 +1,117 @@
-# Application-Template
+# LAVI — Live in AI
 
-OriGine Engine を使用したアプリケーションプロジェクトの雛形です。
-Engine を submodule として取り込み、最小構成の FrameWork / main.cpp / premake 設定を提供します。
+OriGine Engine ベースの AI 統合 Windows デスクトップアプリケーション。
+マイク・Webカメラ・画面キャプチャの入力に対して、リアルタイムに AI 処理を行います。
 
----
+## 機能
+
+| 機能 | 技術 | 概要 |
+|------|------|------|
+| 音声認識 | [whisper.cpp](https://github.com/ggerganov/whisper.cpp) + CUDA | マイク入力をリアルタイム文字起こし (beam search + VAD) |
+| 音声合成 | [VoiceVox](https://voicevox.hiroshiba.jp/) Engine | テキストから音声を生成・再生 (XAudio2) |
+| 画像認識 | Claude API (Vision) | Webカメラ/画面キャプチャを Claude に送信して解析 |
+| メディアキャプチャ | DirectX 12 / WASAPI | マイク・Webカメラ・画面キャプチャの統合管理 |
+
+## 必要環境
+
+- Windows 10/11 (x64)
+- Visual Studio 2026 (v145 ツールセット)
+- NVIDIA GPU + [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit) (Whisper GPU推論用)
+- [OriGine Engine](https://github.com/oriharaIssei/OriGine) (git submodule)
+
+## ビルド手順
+
+```powershell
+# 1. submodule 取得
+git submodule update --init --recursive
+
+# 2. ソリューション生成
+.\premake.ps1
+
+# 3. Whisper CUDA ビルド (初回のみ)
+.\build_whisper_cuda.bat
+
+# 4. Visual Studio で project/LAVI.slnx を開いてビルド (Debug / Develop / Release)
+```
+
+## リソースの準備
+
+ビルド前に以下を配置してください (いずれも git 管理対象外)。
+
+### Whisper モデル
+
+`project/application/resource/whisper/` に配置:
+
+- `ggml-large-v3.bin` — 認識モデル
+- `ggml-silero-v6.2.0.bin` — VAD モデル
+
+### VoiceVox Engine
+
+`project/application/resource/voiceVox/` に VoiceVox Engine の 7z を配置し、
+`resource/7zip/7z.exe` で展開:
+
+```powershell
+.\project\application\resource\7zip\7z.exe x `
+    .\project\application\resource\voiceVox\voicevox_engine-windows-nvidia-*.7z.001 `
+    -o.\project\application\resource\voiceVox\
+```
+
+### libcurl
+
+`project/application/externals/curl/` に以下の構成で配置:
+
+```
+curl/
+├── include/curl/   # ヘッダー (curl.h 等)
+├── lib/            # libcurl.lib (MSVC インポートライブラリ)
+└── bin/            # libcurl.dll
+```
 
 ## ディレクトリ構成
 
 ```
-Application-Template/
-├── README.md
-├── .gitignore
-├── .gitmodules              # Engine submodule 用 (setup.ps1 が記述)
-├── setup.ps1                # 初回セットアップ (名前置換・submodule追加・premake)
-├── premake.ps1              # premake 実行ラッパ
+LAVI/
+├── premake.ps1                 # premake 実行ラッパ
+├── build_whisper_cuda.bat      # Whisper CUDA ビルドスクリプト
+├── Docs/
+│   └── Todo.html
 └── project/
     ├── config/
-    │   └── premake5.lua     # workspace + App project 定義 (Engine は include)
-    ├── engine/              # submodule: Engine リポジトリ (setup.ps1 で追加)
-    │   └── premake.lua.example   # Engine 側に用意すべき premake.lua の参考
+    │   └── premake5.lua        # ワークスペース定義
+    ├── engine/                 # submodule: OriGine Engine
     └── application/
         ├── code/
         │   ├── main.cpp
         │   ├── FrameWork.{h,cpp}
-        │   ├── OriGineDevEditor.{h,cpp}
-        │   ├── OriGineDevGame.{h,cpp}
-        │   ├── component/ComponentTemplate.txt
-        │   ├── system/SystemTemplate.txt
-        │   └── manager/
+        │   ├── LaviEditor.{h,cpp}    # Debug 用エディタ
+        │   ├── LaviGame.{h,cpp}      # Release 用ゲームループ
+        │   └── system/
+        │       ├── MediaCaptureDemoSystem.{h,cpp}  # メディア統合 UI
+        │       ├── WhisperTranscriber.{h,cpp}      # 音声認識
+        │       ├── VoiceVoxClient.{h,cpp}          # 音声合成
+        │       └── VisionAnalyzer.{h,cpp}          # 画像認識
+        ├── externals/
+        │   ├── whisper.cpp/    # whisper.cpp (submodule)
+        │   ├── curl/           # libcurl (手動配置)
+        │   └── stb_image_write.h
         └── resource/
-        # cookedResource/ は AssetCooker による成果物のためローカル生成 (gitignore)
+            ├── whisper/        # Whisper モデル (手動配置)
+            ├── voiceVox/       # VoiceVox Engine (7z 展開)
+            ├── 7zip/           # 7-Zip コマンドライン版
+            └── api_config.json # API キー設定 (自動生成)
 ```
 
-`OriGineDev` は `setup.ps1` 実行時にプロジェクト名に置換されます。
+## 使い方
 
----
+1. アプリを起動すると **Media Capture Demo** ウィンドウが開きます
+2. 各タブから機能を利用:
+   - **Microphone** — マイクの選択・録音・Whisper による文字起こし
+   - **WebCamera** — Webカメラ映像のプレビュー
+   - **ScreenCapture** — 画面キャプチャのプレビュー
+   - **VoiceVox** — テキスト入力 → 音声合成・再生、Whisper 結果の読み上げ
+   - **Vision** — Webカメラ/画面キャプチャのフレームを Claude API で解析
 
-## クイックスタート
+## ライセンス
 
-### 1. GitHub の Template Repository 機能で新規作成
-
-GitHub 上で本リポジトリを **Template** に設定し、`Use this template` から新規リポジトリを生成するか、
-コマンドラインから:
-
-```powershell
-gh repo create MyGame --template <user>/Application-Template --private --clone
-cd MyGame
-```
-
-### 2. セットアップ実行
-
-```powershell
-.\setup.ps1 -AppName "MyGame" -EngineRepo "https://github.com/<user>/Engine.git"
-```
-
-`setup.ps1` は次を行います:
-1. `OriGineDev` をファイル内容・ファイル名の両方で `MyGame` に置換
-2. Engine を `project/engine` に git submodule として追加
-3. `premake.ps1` を実行して Visual Studio ソリューションを生成
-
-### 3. ビルド
-
-`project/MyGame.sln` を Visual Studio で開き、`Debug` / `Develop` / `Release` のいずれかをビルド。
-
----
-
-## Engine リポジトリ側で必要な準備
-
-本テンプレートが想定する Engine 構成:
-
-```
-Engine/
-├── premake.lua              # defineEngineProjects / getEngineIncludeDirs / getEngineLinks を export
-├── code/                    # Engine 本体ソース
-├── math/ util/ editor/ tool/
-├── externals/               # DirectXTex, imgui, assimp 等
-└── ...
-```
-
-`premake.lua` の実装例は [OriGine Engine リポジトリ](https://github.com/oriharaIssei/OriGine) の
-ルート `premake.lua` を参照してください。
-Engine 側に `premake.lua` を配置すると、Application 側の `project/config/premake5.lua` から
-`include "engine/premake.lua"` 経由で Engine/DirectXTex/imgui の project 定義を再利用できます。
-
----
-
-## setup.ps1 のオプション
-
-| オプション         | 説明                                                   |
-| ------------------ | ------------------------------------------------------ |
-| `-AppName`         | **必須** 識別子形式のアプリ名 (例: `MyGame`)           |
-| `-EngineRepo`      | Engine リポジトリの URL                                 |
-| `-EngineBranch`    | Engine の追跡ブランチ (既定: `main`)                   |
-| `-SkipSubmodule`   | submodule 追加をスキップ                               |
-| `-SkipPremake`     | premake 実行をスキップ                                 |
-
----
-
-## よくあるフロー
-
-### 既存の OriGine リポジトリから Engine 分離後、初めて使う
-
-1. Engine リポジトリを作成し、`premake.lua` を `premake.lua.example` を参考に配置
-2. 本テンプレートから新規リポジトリを生成
-3. `setup.ps1` を実行
-
-### Engine 側を最新化したい
-
-```powershell
-cd project\engine
-git pull origin main
-cd ..\..
-git add project/engine
-git commit -m "Update Engine submodule"
-```
-
----
-
-## TODO / 既知の制約
-
-- [ ] Engine 側の `premake.lua` 実装 (テンプレート側では `.example` のみ提供)
-- [ ] premake5.exe の配置方法 (Engine 側 externals に入れるか、setup で取得するか要検討)
-- [ ] `resource/` の初期アセット一式 (`cookedResource/` は AssetCooker 生成物のため対象外)
+本リポジトリのアプリケーションコードは個人プロジェクトです。
+利用している外部ライブラリ・エンジンはそれぞれのライセンスに従います。

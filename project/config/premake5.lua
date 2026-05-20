@@ -1,5 +1,5 @@
 -- ==========================================================================
--- OriGineDev Workspace Premake5 Script
+-- LAVI Workspace Premake5 Script
 -- ==========================================================================
 -- このファイルはテンプレートから生成されています。
 -- - Application 固有の premake 記述のみをここに書く
@@ -15,10 +15,10 @@ os.chdir(_SCRIPT_DIR .. "/..")
 --     defineEngineProjects() / getEngineIncludeDirs() / getEngineLinks() を export する
 include "engine/premake.lua"
 
-workspace "OriGineDev"
+workspace "LAVI"
     architecture "x86_64"
     configurations { "Debug", "Develop", "Release" }
-    startproject "OriGineDev"
+    startproject "LAVI"
 
 -- ==========================================================================
 -- Engine Projects (Engine 側の premake.lua が定義する)
@@ -34,12 +34,12 @@ defineEngineProjects()
 -- ==========================================================================
 -- Application Project
 -- ==========================================================================
-project "OriGineDev"
+project "LAVI"
     kind "WindowedApp"
     language "C++"
     location "application"
     targetdir "../generated/output/%{cfg.buildcfg}/"
-    objdir "../generated/obj/%{cfg.buildcfg}/OriGineDev/"
+    objdir "../generated/obj/%{cfg.buildcfg}/LAVI/"
     debugdir "%{wks.location}"
     files { "application/**.h", "application/**.cpp" }
     removefiles { "application/externals/**" }

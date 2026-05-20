@@ -9,8 +9,8 @@
 #include "directX12/DxDebug.h"
 
 /// FrameWorks
-#include "OriGineDevEditor.h"
-#include "OriGineDevGame.h"
+#include "LaviEditor.h"
+#include "LaviGame.h"
 #include "FrameWork.h"
 
 /// externals
@@ -30,9 +30,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     std::unique_ptr<FrameWork> application = nullptr;
 
 #if defined(DEBUG) || defined(DEBUG_REPLAY)
-    application = std::make_unique<OriGineDevEditor>();
+    application = std::make_unique<LaviEditor>();
 #else
-    application = std::make_unique<OriGineDevGame>();
+    application = std::make_unique<LaviGame>();
 #endif
 
     application->Initialize(cmdLines);
