@@ -29,3 +29,4 @@ Thumbs.db
 
 # Premake (engine submodule 側にあるのでローカルに置かれた場合のみ)
 /project/config/premake5.exe
+/docs

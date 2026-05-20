@@ -8,10 +8,14 @@
 #include "directX12/DxDescriptor.h"
 
 #include <atomic>
+#include <future>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
+
+class WhisperTranscriber;
+#include "WhisperTranscriber.h"
 
 namespace OriGine {
 class Microphone;
@@ -75,4 +79,13 @@ private:
     PreviewTexture screenPreview_;
     std::vector<uint8_t> camFrameBuffer_;
     std::vector<uint8_t> screenFrameBuffer_;
+
+    std::unique_ptr<WhisperTranscriber> transcriber_;
+    std::string whisperModelPath_ = "application/resource/whisper/ggml-large-v3.bin";
+    std::string vadModelPath_ = "application/resource/whisper/ggml-silero-v6.2.0.bin";
+    std::string transcribedText_;
+    WhisperResult detailedResult_;
+    bool showDetailedResult_ = false;
+    std::future<bool> transcribeFuture_;
+    bool isTranscribing_ = false;
 };

@@ -26,6 +26,12 @@ workspace "OriGineDev"
 defineEngineProjects()
 
 -- ==========================================================================
+-- whisper.cpp (CMake で CUDA 付きビルド済み)
+-- ==========================================================================
+-- ビルド手順: build_whisper_cuda.bat を実行
+-- 生成物: application/externals/whisper.cpp/build_cuda/ 以下の .lib
+
+-- ==========================================================================
 -- Application Project
 -- ==========================================================================
 project "OriGineDev"
@@ -36,6 +42,7 @@ project "OriGineDev"
     objdir "../generated/obj/%{cfg.buildcfg}/OriGineDev/"
     debugdir "%{wks.location}"
     files { "application/**.h", "application/**.cpp" }
+    removefiles { "application/externals/**" }
 
     clangtidy "On"
 
@@ -43,15 +50,32 @@ project "OriGineDev"
         {
             "$(ProjectDir)code",
             "$(ProjectDir)",
+            "$(SolutionDir)application/externals/whisper.cpp/include",
+            "$(SolutionDir)application/externals/whisper.cpp/ggml/include",
         },
         getEngineIncludeDirs()
     ))
 
     dependson { "DirectXTex", "imgui" }
+    libdirs { "$(CUDA_PATH)/lib/x64" }
     links(table.join(
-        { "OriGine" },
+        { "OriGine", "whisper", "ggml", "ggml-base", "ggml-cpu", "ggml-cuda", "cudart_static", "cublas", "cublasLt", "cuda" },
         getEngineLinks()
     ))
+
+    filter "configurations:Debug"
+        libdirs {
+            "application/externals/whisper.cpp/build_cuda_debug/src",
+            "application/externals/whisper.cpp/build_cuda_debug/ggml/src",
+            "application/externals/whisper.cpp/build_cuda_debug/ggml/src/ggml-cuda",
+        }
+    filter "configurations:Develop or Release"
+        libdirs {
+            "application/externals/whisper.cpp/build_cuda_release/src",
+            "application/externals/whisper.cpp/build_cuda_release/ggml/src",
+            "application/externals/whisper.cpp/build_cuda_release/ggml/src/ggml-cuda",
+        }
+    filter {}
 
     warnings "Extra"
     multiprocessorcompile "On"
