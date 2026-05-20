@@ -65,6 +65,8 @@ project "OriGineDev"
           "libcurl", "xaudio2" },
         getEngineLinks()
     ))
+
+    libdirs { "application/externals/curl/lib" }
     filter {}
 
     filter "configurations:Debug"

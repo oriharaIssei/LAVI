@@ -22,6 +22,9 @@
 # whisper.cpp ビルド成果物 (各自 build_whisper_cuda.bat でビルド)
 /project/application/externals/whisper.cpp/build_cuda*/
 
+# API設定 (APIキーを含むため)
+/project/application/resource/api_config.json
+
 # VoiceVox Engine ランタイム (各自 7z から展開)
 /project/application/resource/voiceVox/windows-nvidia/
 
@@ -40,3 +43,5 @@ Thumbs.db
 # Premake (engine submodule 側にあるのでローカルに置かれた場合のみ)
 /project/config/premake5.exe
 /docs
+/project/application/resource/whisper
+project/imgui.ini

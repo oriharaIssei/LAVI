@@ -17,29 +17,33 @@
 class WhisperTranscriber;
 #include "WhisperTranscriber.h"
 #include "VoiceVoxClient.h"
+#include "VisionAnalyzer.h"
 
-namespace OriGine {
-class Microphone;
-class WebCamera;
-class ScreenCapture;
-struct MicrophoneDeviceInfo;
-struct WebCameraDeviceInfo;
-struct ScreenMonitorInfo;
+namespace OriGine
+{
+    class Microphone;
+    class WebCamera;
+    class ScreenCapture;
+    struct MicrophoneDeviceInfo;
+    struct WebCameraDeviceInfo;
+    struct ScreenMonitorInfo;
 } // namespace OriGine
 
-struct PreviewTexture {
+struct PreviewTexture
+{
     Microsoft::WRL::ComPtr<ID3D12Resource> texture;
     Microsoft::WRL::ComPtr<ID3D12Resource> uploadBuffer;
     OriGine::DxSrvDescriptor srvDescriptor{0};
-    uint32_t width  = 0;
+    uint32_t width = 0;
     uint32_t height = 0;
     D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_COMMON;
 
-    void Release(OriGine::DxSrvHeap* srvHeap);
+    void Release(OriGine::DxSrvHeap *srvHeap);
 };
 
 class MediaCaptureDemoSystem
-    : public OriGine::ISystem {
+    : public OriGine::ISystem
+{
 public:
     MediaCaptureDemoSystem();
     ~MediaCaptureDemoSystem() override;
@@ -55,9 +59,13 @@ private:
     void DrawWebCameraPanel();
     void DrawScreenCapturePanel();
     void DrawVoiceVoxPanel();
+    void DrawVisionPanel();
 
-    bool CreatePreviewTexture(PreviewTexture& preview, uint32_t width, uint32_t height);
-    void UploadPreviewFrame(PreviewTexture& preview, const uint8_t* data, uint32_t dataSize, uint32_t width, uint32_t height);
+    void LoadApiConfig();
+    void SaveApiConfig();
+
+    bool CreatePreviewTexture(PreviewTexture &preview, uint32_t width, uint32_t height);
+    void UploadPreviewFrame(PreviewTexture &preview, const uint8_t *data, uint32_t dataSize, uint32_t width, uint32_t height);
 
     std::unique_ptr<OriGine::Microphone> microphone_;
     std::unique_ptr<OriGine::WebCamera> webCamera_;
@@ -69,11 +77,11 @@ private:
 
     int selectedMicDevice_ = 0;
     int selectedCamDevice_ = 0;
-    int selectedMonitor_   = 0;
+    int selectedMonitor_ = 0;
 
     std::mutex audioMutex_;
     float currentAudioLevel_ = 0.0f;
-    float peakAudioLevel_    = 0.0f;
+    float peakAudioLevel_ = 0.0f;
 
     std::string recordFilePath_ = "recorded.wav";
 
@@ -99,4 +107,13 @@ private:
     int selectedSpeaker_ = 0;
     std::future<bool> speakFuture_;
     bool isSpeaking_ = false;
+
+    // Vision
+    std::unique_ptr<VisionAnalyzer> visionAnalyzer_;
+    std::string visionApiKey_;
+    std::string visionPrompt_ = "Describe what you see in this image.";
+    std::string visionResult_;
+    std::future<VisionResult> visionFuture_;
+    bool isVisionAnalyzing_ = false;
+    int visionSource_ = 0; // 0=WebCamera, 1=ScreenCapture
 };
