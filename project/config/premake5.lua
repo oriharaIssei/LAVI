@@ -59,13 +59,15 @@ project "OriGineDev"
 
     dependson { "DirectXTex", "imgui" }
     libdirs { "$(CUDA_PATH)/lib/x64" }
+    libdirs { "application/externals/curl/lib" }
     links(table.join(
         { "OriGine", "whisper", "ggml", "ggml-base", "ggml-cpu", "ggml-cuda", "cudart_static", "cublas", "cublasLt", "cuda",
-          "libcurl" },
+          "libcurl", "xaudio2" },
         getEngineLinks()
     ))
 
     libdirs { "application/externals/curl/lib" }
+    filter {}
 
     filter "configurations:Debug"
         libdirs {
