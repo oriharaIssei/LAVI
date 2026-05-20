@@ -52,6 +52,7 @@ project "OriGineDev"
             "$(ProjectDir)",
             "$(SolutionDir)application/externals/whisper.cpp/include",
             "$(SolutionDir)application/externals/whisper.cpp/ggml/include",
+            "$(SolutionDir)application/externals/curl/include",
         },
         getEngineIncludeDirs()
     ))
@@ -59,9 +60,12 @@ project "OriGineDev"
     dependson { "DirectXTex", "imgui" }
     libdirs { "$(CUDA_PATH)/lib/x64" }
     links(table.join(
-        { "OriGine", "whisper", "ggml", "ggml-base", "ggml-cpu", "ggml-cuda", "cudart_static", "cublas", "cublasLt", "cuda" },
+        { "OriGine", "whisper", "ggml", "ggml-base", "ggml-cpu", "ggml-cuda", "cudart_static", "cublas", "cublasLt", "cuda",
+          "libcurl" },
         getEngineLinks()
     ))
+
+    libdirs { "application/externals/curl/lib" }
 
     filter "configurations:Debug"
         libdirs {
@@ -108,3 +112,6 @@ project "OriGineDev"
     filter "system:windows"
         cppdialect "C++20"
         systemversion "latest"
+        postbuildcommands {
+            '{COPY} "%{wks.location}/application/externals/curl/bin/libcurl.dll" "%{cfg.targetdir}"',
+        }

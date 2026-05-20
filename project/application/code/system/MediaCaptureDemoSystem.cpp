@@ -1,5 +1,6 @@
 #include "MediaCaptureDemoSystem.h"
 #include "WhisperTranscriber.h"
+#include "VisionAnalyzer.h"
 
 /// engine
 #define ENGINE_INCLUDE
@@ -69,6 +70,7 @@ void MediaCaptureDemoSystem::Initialize(){
 	webCamera_     = std::make_unique<OriGine::WebCamera>();
 	screenCapture_ = std::make_unique<OriGine::ScreenCapture>();
 	transcriber_   = std::make_unique<WhisperTranscriber>();
+	visionAnalyzer_ = std::make_unique<VisionAnalyzer>();
 
 	micDevices_ = OriGine::Microphone::EnumerateDevices();
 	camDevices_ = OriGine::WebCamera::EnumerateDevices();
@@ -119,6 +121,7 @@ void MediaCaptureDemoSystem::Finalize(){
 		transcriber_->UnloadModel();
 	}
 	transcriber_.reset();
+	visionAnalyzer_.reset();
 	screenCapture_.reset();
 	webCamera_.reset();
 	microphone_.reset();
@@ -140,6 +143,10 @@ void MediaCaptureDemoSystem::Update(){
 		}
 		if(ImGui::BeginTabItem("ScreenCapture")){
 			DrawScreenCapturePanel();
+			ImGui::EndTabItem();
+		}
+		if(ImGui::BeginTabItem("Vision")){
+			DrawVisionPanel();
 			ImGui::EndTabItem();
 		}
 		ImGui::EndTabBar();
@@ -550,4 +557,107 @@ void MediaCaptureDemoSystem::DrawScreenCapturePanel(){
 				ImVec2(previewW,previewH));
 		}
 	}
+}
+
+void MediaCaptureDemoSystem::DrawVisionPanel(){
+	ImGui::Text("Vision (Claude API)");
+	ImGui::Separator();
+
+	// API Key input
+	ImGui::InputText("API Key",visionApiKey_.data(),visionApiKey_.capacity() + 1,
+		ImGuiInputTextFlags_Password | ImGuiInputTextFlags_CallbackResize,
+		[](ImGuiInputTextCallbackData* data) -> int{
+			if(data->EventFlag == ImGuiInputTextFlags_CallbackResize){
+				auto* str = static_cast<std::string*>(data->UserData);
+				str->resize(data->BufTextLen);
+				data->Buf = str->data();
+			}
+			return 0;
+		},&visionApiKey_);
+
+	// Prompt input
+	ImGui::InputTextMultiline("Prompt",visionPrompt_.data(),visionPrompt_.capacity() + 1,
+		ImVec2(-1,60),
+		ImGuiInputTextFlags_CallbackResize,
+		[](ImGuiInputTextCallbackData* data) -> int{
+			if(data->EventFlag == ImGuiInputTextFlags_CallbackResize){
+				auto* str = static_cast<std::string*>(data->UserData);
+				str->resize(data->BufTextLen);
+				data->Buf = str->data();
+			}
+			return 0;
+		},&visionPrompt_);
+
+	ImGui::Spacing();
+
+	// Source selection
+	ImGui::RadioButton("WebCamera",&visionSource_,0);
+	ImGui::SameLine();
+	ImGui::RadioButton("ScreenCapture",&visionSource_,1);
+
+	ImGui::Spacing();
+
+	// Check async result
+	if(isVisionAnalyzing_ && visionFuture_.valid() &&
+		visionFuture_.wait_for(std::chrono::seconds(0)) == std::future_status::ready){
+		VisionResult res = visionFuture_.get();
+		if(res.success){
+			visionResult_ = res.description;
+		} else{
+			visionResult_ = "[Error] " + res.error;
+		}
+		isVisionAnalyzing_ = false;
+	}
+
+	// Analyze button
+	bool hasSource = (visionSource_ == 0 && webCamera_ && webCamera_->IsCapturing())
+	              || (visionSource_ == 1 && screenCapture_ && screenCapture_->IsCapturing());
+	bool canAnalyze = hasSource && !visionApiKey_.empty() && !isVisionAnalyzing_;
+
+	if(!canAnalyze){ ImGui::BeginDisabled(); }
+	if(ImGui::Button("Analyze")){
+		visionAnalyzer_->SetApiKey(visionApiKey_);
+		visionAnalyzer_->SetPrompt(visionPrompt_);
+
+		const uint8_t* data = nullptr;
+		uint32_t w = 0, h = 0;
+
+		if(visionSource_ == 0){
+			uint32_t fw = 0, fh = 0;
+			if(webCamera_->GetLatestFrame(camFrameBuffer_,fw,fh) && fw > 0 && fh > 0){
+				data = camFrameBuffer_.data();
+				w = fw;
+				h = fh;
+			}
+		} else{
+			uint32_t fw = 0, fh = 0;
+			if(screenCapture_->GetLatestFrame(screenFrameBuffer_,fw,fh) && fw > 0 && fh > 0){
+				data = screenFrameBuffer_.data();
+				w = fw;
+				h = fh;
+			}
+		}
+
+		if(data && w > 0 && h > 0){
+			isVisionAnalyzing_ = true;
+			visionFuture_ = visionAnalyzer_->AnalyzeAsync(data,w,h);
+		}
+	}
+	if(!canAnalyze){ ImGui::EndDisabled(); }
+
+	if(!hasSource){
+		ImGui::SameLine();
+		ImGui::TextColored(ImVec4(1,0.5f,0,1),"Start capture first");
+	}
+
+	if(isVisionAnalyzing_){
+		ImGui::SameLine();
+		ImGui::TextColored(ImVec4(1,1,0,1),"Analyzing...");
+	}
+
+	// Result display
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Text("Result:");
+	ImGui::TextWrapped("%s",visionResult_.empty() ? "(no result)" : visionResult_.c_str());
 }

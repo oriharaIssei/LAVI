@@ -16,6 +16,7 @@
 
 class WhisperTranscriber;
 #include "WhisperTranscriber.h"
+#include "VisionAnalyzer.h"
 
 namespace OriGine {
 class Microphone;
@@ -53,6 +54,7 @@ private:
     void DrawMicrophonePanel();
     void DrawWebCameraPanel();
     void DrawScreenCapturePanel();
+    void DrawVisionPanel();
 
     bool CreatePreviewTexture(PreviewTexture& preview, uint32_t width, uint32_t height);
     void UploadPreviewFrame(PreviewTexture& preview, const uint8_t* data, uint32_t dataSize, uint32_t width, uint32_t height);
@@ -88,4 +90,13 @@ private:
     bool showDetailedResult_ = false;
     std::future<bool> transcribeFuture_;
     bool isTranscribing_ = false;
+
+    // Vision
+    std::unique_ptr<VisionAnalyzer> visionAnalyzer_;
+    std::string visionApiKey_;
+    std::string visionPrompt_ = "Describe what you see in this image.";
+    std::string visionResult_;
+    std::future<VisionResult> visionFuture_;
+    bool isVisionAnalyzing_ = false;
+    int visionSource_ = 0; // 0=WebCamera, 1=ScreenCapture
 };
