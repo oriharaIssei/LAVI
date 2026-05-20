@@ -34,3 +34,4 @@ Thumbs.db
 /project/config/premake5.exe
 /docs
 /project/application/resource/whisper
+project/imgui.ini
