@@ -19,6 +19,9 @@
 # ExeFile 出力
 /ExeFile/
 
+# whisper.cpp ビルド成果物 (各自 build_whisper_cuda.bat でビルド)
+/project/application/externals/whisper.cpp/build_cuda*/
+
 # OS
 .DS_Store
 Thumbs.db
