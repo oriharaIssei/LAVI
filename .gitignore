@@ -22,6 +22,13 @@
 # whisper.cpp ビルド成果物 (各自 build_whisper_cuda.bat でビルド)
 /project/application/externals/whisper.cpp/build_cuda*/
 
+# VoiceVox Engine ランタイム (各自 7z から展開)
+/project/application/resource/voiceVox/windows-nvidia/
+
+# 7-Zip / curl バイナリ (各自配置)
+/project/application/resource/7zip/
+/project/application/externals/curl/
+
 # OS
 .DS_Store
 Thumbs.db
