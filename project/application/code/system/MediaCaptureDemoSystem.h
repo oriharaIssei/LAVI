@@ -18,6 +18,7 @@ class WhisperTranscriber;
 #include "WhisperTranscriber.h"
 #include "VoiceVoxClient.h"
 #include "VisionAnalyzer.h"
+#include "LLMClient.h"
 
 namespace OriGine
 {
@@ -60,9 +61,10 @@ private:
     void DrawScreenCapturePanel();
     void DrawVoiceVoxPanel();
     void DrawVisionPanel();
+    void DrawLLMPanel();
 
-    void LoadApiConfig();
-    void SaveApiConfig();
+    void LoadConfig();
+    void SaveConfig();
 
     bool CreatePreviewTexture(PreviewTexture &preview, uint32_t width, uint32_t height);
     void UploadPreviewFrame(PreviewTexture &preview, const uint8_t *data, uint32_t dataSize, uint32_t width, uint32_t height);
@@ -116,4 +118,17 @@ private:
     std::future<VisionResult> visionFuture_;
     bool isVisionAnalyzing_ = false;
     int visionSource_ = 0; // 0=WebCamera, 1=ScreenCapture
+
+    // LLM
+    std::unique_ptr<LLMClient> llmClient_;
+    std::string llmUserInput_;
+    std::string llmStreamingText_;
+    std::string llmSystemPrompt_ = "あなたはLAVIという名前のAIアシスタントです。日本語で会話してください。";
+    std::future<LLMResponse> llmFuture_;
+    bool isLLMProcessing_ = false;
+    bool llmAutoScroll_ = true;
+    bool llmUseWhisper_ = false;
+    bool llmAttachWebCam_ = false;
+    bool llmAttachScreen_ = false;
+    std::mutex llmStreamMutex_;
 };

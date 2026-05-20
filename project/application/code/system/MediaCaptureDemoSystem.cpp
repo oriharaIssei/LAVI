@@ -2,6 +2,7 @@
 #include "WhisperTranscriber.h"
 #include "VoiceVoxClient.h"
 #include "VisionAnalyzer.h"
+#include "LLMClient.h"
 
 /// engine
 #define ENGINE_INCLUDE
@@ -18,10 +19,10 @@
 
 /// utils
 #include "util/StringUtil.h"
+#include "globalVariables/GlobalVariables.h"
 
 /// math
 #include <cmath>
-#include <fstream>
 
 namespace
 {
@@ -81,6 +82,7 @@ void MediaCaptureDemoSystem::Initialize()
 	transcriber_ = std::make_unique<WhisperTranscriber>();
 	voiceVox_ = std::make_unique<VoiceVoxClient>();
 	visionAnalyzer_ = std::make_unique<VisionAnalyzer>();
+	llmClient_ = std::make_unique<LLMClient>();
 
 	micDevices_ = OriGine::Microphone::EnumerateDevices();
 	camDevices_ = OriGine::WebCamera::EnumerateDevices();
@@ -112,7 +114,7 @@ void MediaCaptureDemoSystem::Initialize()
 			}
 		});
 
-	LoadApiConfig();
+	LoadConfig();
 }
 
 void MediaCaptureDemoSystem::Finalize()
@@ -148,6 +150,11 @@ void MediaCaptureDemoSystem::Finalize()
 		voiceVox_->StopEngine();
 	}
 	voiceVox_.reset();
+	if (llmClient_)
+	{
+		llmClient_->Cancel();
+	}
+	llmClient_.reset();
 	visionAnalyzer_.reset();
 	screenCapture_.reset();
 	webCamera_.reset();
@@ -185,6 +192,11 @@ void MediaCaptureDemoSystem::Update()
 		if (ImGui::BeginTabItem("Vision"))
 		{
 			DrawVisionPanel();
+			ImGui::EndTabItem();
+		}
+		if (ImGui::BeginTabItem("LLM"))
+		{
+			DrawLLMPanel();
 			ImGui::EndTabItem();
 		}
 		ImGui::EndTabBar();
@@ -852,7 +864,7 @@ void MediaCaptureDemoSystem::DrawVisionPanel()
 	ImGui::SameLine();
 	if (ImGui::Button("Save"))
 	{
-		SaveApiConfig();
+		SaveConfig();
 	}
 
 	// Prompt input
@@ -957,41 +969,245 @@ void MediaCaptureDemoSystem::DrawVisionPanel()
 	ImGui::TextWrapped("%s", visionResult_.empty() ? "(no result)" : visionResult_.c_str());
 }
 
-static const char *kApiConfigPath = "application/resource/api_config.json";
+static const std::string kConfigScene = "Settings";
+static const std::string kConfigGroup = "ApiConfig";
 
-void MediaCaptureDemoSystem::LoadApiConfig()
+void MediaCaptureDemoSystem::LoadConfig()
 {
-	std::ifstream ifs(kApiConfigPath);
-	if (!ifs.is_open())
-	{
-		return;
-	}
-	std::string json((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+	auto *gv = OriGine::GlobalVariables::GetInstance();
+	gv->LoadFile(kConfigScene, kConfigGroup);
 
-	auto extractValue = [&](const std::string &key) -> std::string
-	{
-		std::string search = "\"" + key + "\":\"";
-		auto pos = json.find(search);
-		if (pos == std::string::npos)
-			return "";
-		pos += search.size();
-		auto end = json.find('"', pos);
-		if (end == std::string::npos)
-			return "";
-		return json.substr(pos, end - pos);
-	};
-
-	visionApiKey_ = extractValue("vision_api_key");
+	visionApiKey_ = *gv->AddValue<std::string>(kConfigScene, kConfigGroup, "ApiKey", std::string(""));
+	llmSystemPrompt_ = *gv->AddValue<std::string>(kConfigScene, kConfigGroup, "LLM_SystemPrompt",
+		std::string("あなたはLAVIという名前のAIアシスタントです。日本語で会話してください。"));
+	visionPrompt_ = *gv->AddValue<std::string>(kConfigScene, kConfigGroup, "Vision_Prompt", visionPrompt_);
 }
 
-void MediaCaptureDemoSystem::SaveApiConfig()
+void MediaCaptureDemoSystem::SaveConfig()
 {
-	std::ofstream ofs(kApiConfigPath);
-	if (!ofs.is_open())
+	auto *gv = OriGine::GlobalVariables::GetInstance();
+	gv->SetValue(kConfigScene, kConfigGroup, "ApiKey", visionApiKey_);
+	gv->SetValue(kConfigScene, kConfigGroup, "LLM_SystemPrompt", llmSystemPrompt_);
+	gv->SetValue(kConfigScene, kConfigGroup, "Vision_Prompt", visionPrompt_);
+	gv->SaveFile(kConfigScene, kConfigGroup);
+}
+
+void MediaCaptureDemoSystem::DrawLLMPanel()
+{
+	ImGui::Text("LLM Chat (Claude API)");
+	ImGui::Separator();
+
+	// API Key (shared with Vision)
+	ImGui::InputText("API Key##llm", visionApiKey_.data(), visionApiKey_.capacity() + 1, ImGuiInputTextFlags_Password | ImGuiInputTextFlags_CallbackResize, [](ImGuiInputTextCallbackData *data) -> int
+					 {
+			if(data->EventFlag == ImGuiInputTextFlags_CallbackResize){
+				auto* str = static_cast<std::string*>(data->UserData);
+				str->resize(data->BufTextLen);
+				data->Buf = str->data();
+			}
+			return 0; }, &visionApiKey_);
+
+	ImGui::SameLine();
+	if (ImGui::Button("Save##llm"))
 	{
-		return;
+		SaveConfig();
 	}
-	ofs << "{\n";
-	ofs << "  \"vision_api_key\": \"" << visionApiKey_ << "\"\n";
-	ofs << "}\n";
+
+	// System prompt
+	ImGui::InputTextMultiline("System Prompt##llm", llmSystemPrompt_.data(), llmSystemPrompt_.capacity() + 1, ImVec2(-1, 60), ImGuiInputTextFlags_CallbackResize, [](ImGuiInputTextCallbackData *data) -> int
+							  {
+			if(data->EventFlag == ImGuiInputTextFlags_CallbackResize){
+				auto* str = static_cast<std::string*>(data->UserData);
+				str->resize(data->BufTextLen);
+				data->Buf = str->data();
+			}
+			return 0; }, &llmSystemPrompt_);
+
+	ImGui::Spacing();
+
+	// Input source
+	ImGui::Text("Text Input:");
+	ImGui::SameLine();
+	if (ImGui::RadioButton("Text##llm_text", !llmUseWhisper_)) { llmUseWhisper_ = false; }
+	ImGui::SameLine();
+	if (ImGui::RadioButton("Whisper##llm_whisper", llmUseWhisper_)) { llmUseWhisper_ = true; }
+	ImGui::SameLine();
+	ImGui::Text("  Attach:");
+	ImGui::SameLine();
+	ImGui::Checkbox("WebCam##llm", &llmAttachWebCam_);
+	ImGui::SameLine();
+	ImGui::Checkbox("Screen##llm", &llmAttachScreen_);
+
+	ImGui::Spacing();
+	ImGui::Separator();
+
+	// Chat history display
+	float historyHeight = ImGui::GetContentRegionAvail().y - 120.0f;
+	if (historyHeight < 100.0f) historyHeight = 100.0f;
+
+	ImGui::BeginChild("ChatHistory", ImVec2(0, historyHeight), true);
+	{
+		const auto &history = llmClient_->GetHistory();
+		for (size_t i = 0; i < history.size(); ++i)
+		{
+			const auto &msg = history[i];
+			if (msg.role == "user")
+			{
+				ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "You:");
+				ImGui::SameLine();
+				if (!msg.images.empty())
+				{
+					ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "[Image]");
+					ImGui::SameLine();
+				}
+			}
+			else
+			{
+				ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "LAVI:");
+				ImGui::SameLine();
+			}
+			ImGui::TextWrapped("%s", msg.content.c_str());
+			ImGui::Spacing();
+		}
+
+		// Streaming text
+		if (isLLMProcessing_)
+		{
+			ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "LAVI:");
+			ImGui::SameLine();
+			std::lock_guard<std::mutex> lock(llmStreamMutex_);
+			ImGui::TextWrapped("%s", llmStreamingText_.empty() ? "..." : llmStreamingText_.c_str());
+		}
+
+		if (llmAutoScroll_ && ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 20.0f)
+		{
+			ImGui::SetScrollHereY(1.0f);
+		}
+	}
+	ImGui::EndChild();
+
+	ImGui::Separator();
+
+	// Check async result
+	if (isLLMProcessing_ && llmFuture_.valid() &&
+		llmFuture_.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+	{
+		LLMResponse res = llmFuture_.get();
+		if (!res.success && !res.error.empty())
+		{
+			llmClient_->AddMessage("assistant", "[Error] " + res.error);
+		}
+		isLLMProcessing_ = false;
+		llmStreamingText_.clear();
+	}
+
+	// User input area
+	bool enterPressed = false;
+	if (llmUseWhisper_ && !transcribedText_.empty())
+	{
+		llmUserInput_ = transcribedText_;
+	}
+
+	if (llmUseWhisper_)
+	{
+		ImGui::BeginDisabled();
+	}
+	ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - 160);
+	if (ImGui::InputText("##llm_input", llmUserInput_.data(), llmUserInput_.capacity() + 1, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackResize, [](ImGuiInputTextCallbackData *data) -> int
+						  {
+			if(data->EventFlag == ImGuiInputTextFlags_CallbackResize){
+				auto* str = static_cast<std::string*>(data->UserData);
+				str->resize(data->BufTextLen);
+				data->Buf = str->data();
+			}
+			return 0; }, &llmUserInput_))
+	{
+		enterPressed = true;
+	}
+	ImGui::PopItemWidth();
+	if (llmUseWhisper_)
+	{
+		ImGui::EndDisabled();
+	}
+
+	ImGui::SameLine();
+
+	bool canSend = !llmUserInput_.empty() && !visionApiKey_.empty() && !isLLMProcessing_;
+	if (!canSend) ImGui::BeginDisabled();
+
+	if (ImGui::Button("Send##llm") || (enterPressed && canSend))
+	{
+		llmClient_->SetApiKey(visionApiKey_);
+		llmClient_->SetSystemPrompt(llmSystemPrompt_);
+
+		// 画像を収集
+		std::vector<std::pair<const uint8_t *, std::pair<uint32_t, uint32_t>>> images;
+
+		if (llmAttachWebCam_ && webCamera_ && webCamera_->IsCapturing())
+		{
+			uint32_t fw = 0, fh = 0;
+			if (webCamera_->GetLatestFrame(camFrameBuffer_, fw, fh) && fw > 0 && fh > 0)
+			{
+				images.push_back({camFrameBuffer_.data(), {fw, fh}});
+			}
+		}
+		if (llmAttachScreen_ && screenCapture_ && screenCapture_->IsCapturing())
+		{
+			uint32_t fw = 0, fh = 0;
+			if (screenCapture_->GetLatestFrame(screenFrameBuffer_, fw, fh) && fw > 0 && fh > 0)
+			{
+				images.push_back({screenFrameBuffer_.data(), {fw, fh}});
+			}
+		}
+
+		if (images.empty())
+		{
+			llmClient_->AddMessage("user", llmUserInput_);
+		}
+		else
+		{
+			auto &first = images[0];
+			llmClient_->AddMessageWithImage("user", llmUserInput_, first.first, first.second.first, first.second.second);
+			for (size_t i = 1; i < images.size(); ++i)
+			{
+				auto &img = images[i];
+				llmClient_->AddMessageWithImage("user", "", img.first, img.second.first, img.second.second);
+			}
+		}
+
+		isLLMProcessing_ = true;
+		llmStreamingText_.clear();
+
+		llmFuture_ = llmClient_->SendStreamAsync([this](const std::string &delta, bool done)
+												  {
+			if (!done) {
+				std::lock_guard<std::mutex> lock(llmStreamMutex_);
+				llmStreamingText_ += delta;
+			} });
+
+		llmUserInput_.clear();
+	}
+
+	if (!canSend) ImGui::EndDisabled();
+
+	ImGui::SameLine();
+
+	if (isLLMProcessing_)
+	{
+		if (ImGui::Button("Cancel##llm"))
+		{
+			llmClient_->Cancel();
+		}
+	}
+	else
+	{
+		if (ImGui::Button("Clear##llm"))
+		{
+			llmClient_->ClearHistory();
+		}
+	}
+
+	// Token info
+	ImGui::SameLine();
+	ImGui::Text("Messages: %d", static_cast<int>(llmClient_->GetHistory().size()));
 }
