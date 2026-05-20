@@ -60,7 +60,7 @@ private:
     whisper_context* ctx_ = nullptr;
     int nThreads_ = 4;
     std::string language_ = "ja";
-    std::string initialPrompt_;
+    std::string initialPrompt_ = "以下は日本語の会話です。";
     int beamSize_ = 5;
     std::string vadModelPath_;
 

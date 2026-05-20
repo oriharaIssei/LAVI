@@ -101,15 +101,16 @@ bool WhisperTranscriber::Transcribe() {
 
     wparams.suppress_blank   = true;
     wparams.suppress_nst     = true;
-    wparams.no_speech_thold  = 0.6f;
-    wparams.entropy_thold    = 2.4f;
-    wparams.logprob_thold    = -1.0f;
+    wparams.no_speech_thold  = 0.8f;
+    wparams.entropy_thold    = 2.0f;
+    wparams.logprob_thold    = -0.5f;
     wparams.temperature      = 0.0f;
-    wparams.temperature_inc  = 0.2f;
+    wparams.temperature_inc  = 0.0f;
 
     if (!vadModelPath_.empty()) {
         wparams.vad            = true;
         wparams.vad_model_path = vadModelPath_.c_str();
+        wparams.vad_params.threshold = 0.8f;
     }
 
     if (!initialPrompt_.empty()) {
@@ -124,13 +125,26 @@ bool WhisperTranscriber::Transcribe() {
     WhisperResult newResult;
     int nSegments = whisper_full_n_segments(ctx_);
     for (int i = 0; i < nSegments; ++i) {
-        WhisperSegment seg;
         const char* segText = whisper_full_get_segment_text(ctx_, i);
-        seg.text = segText ? segText : "";
+        std::string text = segText ? segText : "";
+
+        int nTokens = whisper_full_n_tokens(ctx_, i);
+        float avgProb = 0.0f;
+        for (int j = 0; j < nTokens; ++j) {
+            avgProb += whisper_full_get_token_data(ctx_, i, j).p;
+        }
+        if (nTokens > 0) avgProb /= static_cast<float>(nTokens);
+
+        if (avgProb < 0.4f) continue;
+
+        if (text.find("(") != std::string::npos || text.find("[") != std::string::npos ||
+            text.find("（") != std::string::npos || text.find("♪") != std::string::npos) continue;
+
+        WhisperSegment seg;
+        seg.text = text;
         seg.t0 = whisper_full_get_segment_t0(ctx_, i);
         seg.t1 = whisper_full_get_segment_t1(ctx_, i);
 
-        int nTokens = whisper_full_n_tokens(ctx_, i);
         for (int j = 0; j < nTokens; ++j) {
             whisper_token_data tdata = whisper_full_get_token_data(ctx_, i, j);
             const char* tokenText = whisper_full_get_token_text(ctx_, i, j);

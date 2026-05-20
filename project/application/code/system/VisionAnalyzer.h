@@ -33,7 +33,7 @@ private:
 
     std::string apiKey_;
     std::string model_ = "claude-sonnet-4-20250514";
-    std::string prompt_ = "Describe what you see in this image.";
+    std::string prompt_ = "この画像に写っているものを日本語で説明してください。";
     std::atomic<bool> isAnalyzing_{false};
     mutable std::mutex mutex_;
 };

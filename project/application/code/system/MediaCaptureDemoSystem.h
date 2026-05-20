@@ -111,7 +111,7 @@ private:
     // Vision
     std::unique_ptr<VisionAnalyzer> visionAnalyzer_;
     std::string visionApiKey_;
-    std::string visionPrompt_ = "Describe what you see in this image.";
+    std::string visionPrompt_ = "この画像に写っているものを日本語で説明してください。";
     std::string visionResult_;
     std::future<VisionResult> visionFuture_;
     bool isVisionAnalyzing_ = false;
