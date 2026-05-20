@@ -1,5 +1,6 @@
 #include "MediaCaptureDemoSystem.h"
 #include "WhisperTranscriber.h"
+#include "VoiceVoxClient.h"
 
 /// engine
 #define ENGINE_INCLUDE
@@ -69,6 +70,7 @@ void MediaCaptureDemoSystem::Initialize(){
 	webCamera_     = std::make_unique<OriGine::WebCamera>();
 	screenCapture_ = std::make_unique<OriGine::ScreenCapture>();
 	transcriber_   = std::make_unique<WhisperTranscriber>();
+	voiceVox_      = std::make_unique<VoiceVoxClient>();
 
 	micDevices_ = OriGine::Microphone::EnumerateDevices();
 	camDevices_ = OriGine::WebCamera::EnumerateDevices();
@@ -119,6 +121,11 @@ void MediaCaptureDemoSystem::Finalize(){
 		transcriber_->UnloadModel();
 	}
 	transcriber_.reset();
+	if(voiceVox_){
+		voiceVox_->Stop();
+		voiceVox_->StopEngine();
+	}
+	voiceVox_.reset();
 	screenCapture_.reset();
 	webCamera_.reset();
 	microphone_.reset();
@@ -140,6 +147,10 @@ void MediaCaptureDemoSystem::Update(){
 		}
 		if(ImGui::BeginTabItem("ScreenCapture")){
 			DrawScreenCapturePanel();
+			ImGui::EndTabItem();
+		}
+		if(ImGui::BeginTabItem("VoiceVox")){
+			DrawVoiceVoxPanel();
 			ImGui::EndTabItem();
 		}
 		ImGui::EndTabBar();
@@ -549,5 +560,134 @@ void MediaCaptureDemoSystem::DrawScreenCapturePanel(){
 				reinterpret_cast<ImTextureID>(screenPreview_.srvDescriptor.GetGpuHandle().ptr),
 				ImVec2(previewW,previewH));
 		}
+	}
+}
+
+void MediaCaptureDemoSystem::DrawVoiceVoxPanel(){
+	ImGui::Text("VoiceVox (Text-to-Speech)");
+	ImGui::Separator();
+
+	// Engine path & start/stop
+	ImGui::InputText("Engine Path",voiceVoxEnginePath_.data(),voiceVoxEnginePath_.capacity() + 1,
+		ImGuiInputTextFlags_CallbackResize,
+		[](ImGuiInputTextCallbackData* data) -> int{
+			if(data->EventFlag == ImGuiInputTextFlags_CallbackResize){
+				auto* str = static_cast<std::string*>(data->UserData);
+				str->resize(data->BufTextLen);
+				data->Buf = str->data();
+			}
+			return 0;
+		},&voiceVoxEnginePath_);
+
+	bool engineRunning = voiceVox_->IsEngineRunning();
+	bool engineReady = engineRunning && voiceVox_->IsEngineReady();
+
+	if(!engineRunning){
+		if(ImGui::Button("Start Engine")){
+			voiceVox_->StartEngine(voiceVoxEnginePath_);
+			if(voiceVox_->IsEngineReady()){
+				voiceVoxSpeakers_ = voiceVox_->GetSpeakers();
+			}
+		}
+	} else{
+		if(ImGui::Button("Stop Engine")){
+			voiceVox_->StopEngine();
+			voiceVoxSpeakers_.clear();
+		}
+		ImGui::SameLine();
+		if(engineReady){
+			ImGui::TextColored(ImVec4(0,1,0,1),"Ready");
+		} else{
+			ImGui::TextColored(ImVec4(1,1,0,1),"Starting...");
+		}
+	}
+
+	if(!engineReady){
+		return;
+	}
+
+	ImGui::Spacing();
+	ImGui::Separator();
+
+	// Speaker selection
+	if(voiceVoxSpeakers_.empty()){
+		if(ImGui::Button("Refresh Speakers")){
+			voiceVoxSpeakers_ = voiceVox_->GetSpeakers();
+		}
+	} else{
+		std::string selectedLabel = voiceVoxSpeakers_[selectedSpeaker_].name
+			+ " (" + voiceVoxSpeakers_[selectedSpeaker_].styleName + ")";
+		if(ImGui::BeginCombo("Speaker",selectedLabel.c_str())){
+			for(int i = 0; i < static_cast<int>(voiceVoxSpeakers_.size()); ++i){
+				std::string label = voiceVoxSpeakers_[i].name
+					+ " (" + voiceVoxSpeakers_[i].styleName + ")";
+				if(ImGui::Selectable(label.c_str(),selectedSpeaker_ == i)){
+					selectedSpeaker_ = i;
+				}
+			}
+			ImGui::EndCombo();
+		}
+	}
+
+	ImGui::Spacing();
+
+	// Text input
+	ImGui::InputTextMultiline("##voicevox_text",voiceVoxText_.data(),voiceVoxText_.capacity() + 1,
+		ImVec2(-1,80),
+		ImGuiInputTextFlags_CallbackResize,
+		[](ImGuiInputTextCallbackData* data) -> int{
+			if(data->EventFlag == ImGuiInputTextFlags_CallbackResize){
+				auto* str = static_cast<std::string*>(data->UserData);
+				str->resize(data->BufTextLen);
+				data->Buf = str->data();
+			}
+			return 0;
+		},&voiceVoxText_);
+
+	ImGui::Spacing();
+
+	// Check async result
+	if(isSpeaking_ && speakFuture_.valid() &&
+		speakFuture_.wait_for(std::chrono::seconds(0)) == std::future_status::ready){
+		speakFuture_.get();
+		isSpeaking_ = false;
+	}
+
+	// Speak button
+	bool canSpeak = !voiceVoxText_.empty() && !voiceVoxSpeakers_.empty() && !isSpeaking_;
+	if(!canSpeak){ ImGui::BeginDisabled(); }
+	if(ImGui::Button("Speak")){
+		isSpeaking_ = true;
+		int speakerId = voiceVoxSpeakers_[selectedSpeaker_].id;
+		speakFuture_ = voiceVox_->SpeakAsync(voiceVoxText_,speakerId);
+	}
+	if(!canSpeak){ ImGui::EndDisabled(); }
+
+	if(isSpeaking_){
+		ImGui::SameLine();
+		ImGui::TextColored(ImVec4(1,1,0,1),"Speaking...");
+	}
+
+	ImGui::SameLine();
+	if(ImGui::Button("Stop")){
+		voiceVox_->Stop();
+	}
+
+	// Whisper -> VoiceVox pipeline
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Text("Whisper -> VoiceVox");
+	if(!transcribedText_.empty()){
+		if(ImGui::Button("Speak Transcription")){
+			if(!isSpeaking_ && !voiceVoxSpeakers_.empty()){
+				isSpeaking_ = true;
+				int speakerId = voiceVoxSpeakers_[selectedSpeaker_].id;
+				speakFuture_ = voiceVox_->SpeakAsync(transcribedText_,speakerId);
+			}
+		}
+		ImGui::SameLine();
+		ImGui::TextWrapped("%s",transcribedText_.c_str());
+	} else{
+		ImGui::TextDisabled("(Transcribe audio first in Microphone tab)");
 	}
 }

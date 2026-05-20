@@ -16,6 +16,7 @@
 
 class WhisperTranscriber;
 #include "WhisperTranscriber.h"
+#include "VoiceVoxClient.h"
 
 namespace OriGine {
 class Microphone;
@@ -53,6 +54,7 @@ private:
     void DrawMicrophonePanel();
     void DrawWebCameraPanel();
     void DrawScreenCapturePanel();
+    void DrawVoiceVoxPanel();
 
     bool CreatePreviewTexture(PreviewTexture& preview, uint32_t width, uint32_t height);
     void UploadPreviewFrame(PreviewTexture& preview, const uint8_t* data, uint32_t dataSize, uint32_t width, uint32_t height);
@@ -88,4 +90,13 @@ private:
     bool showDetailedResult_ = false;
     std::future<bool> transcribeFuture_;
     bool isTranscribing_ = false;
+
+    // VoiceVox
+    std::unique_ptr<VoiceVoxClient> voiceVox_;
+    std::string voiceVoxEnginePath_ = "application/resource/voiceVox/windows-nvidia/run.exe";
+    std::string voiceVoxText_;
+    std::vector<VoiceVoxSpeaker> voiceVoxSpeakers_;
+    int selectedSpeaker_ = 0;
+    std::future<bool> speakFuture_;
+    bool isSpeaking_ = false;
 };
