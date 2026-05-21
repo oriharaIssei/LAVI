@@ -53,6 +53,8 @@ project "LAVI"
             "$(SolutionDir)application/externals/whisper.cpp/include",
             "$(SolutionDir)application/externals/whisper.cpp/ggml/include",
             "$(SolutionDir)application/externals/curl/include",
+            "$(SolutionDir)application/externals/onnxruntime/include",
+            "$(SolutionDir)application/externals/opencv/include",
         },
         getEngineIncludeDirs()
     ))
@@ -60,9 +62,11 @@ project "LAVI"
     dependson { "DirectXTex", "imgui" }
     libdirs { "$(CUDA_PATH)/lib/x64" }
     libdirs { "application/externals/curl/lib" }
+    libdirs { "application/externals/onnxruntime/lib" }
+    libdirs { "application/externals/opencv/lib" }
     links(table.join(
         { "OriGine", "whisper", "ggml", "ggml-base", "ggml-cpu", "ggml-cuda", "cudart_static", "cublas", "cublasLt", "cuda",
-          "libcurl", "xaudio2" },
+          "libcurl", "xaudio2", "onnxruntime" },
         getEngineLinks()
     ))
 
@@ -87,12 +91,16 @@ project "LAVI"
     multiprocessorcompile "On"
     buildoptions { "/utf-8", "/bigobj" }
 
+    -- OpenCV 静的ライブラリ (依存順: objdetect -> calib3d -> features2d -> flann -> imgproc -> core -> 3rdparty)
     filter "configurations:Debug"
         defines { "DEBUG", "_DEBUG" }
         symbols "On"
         runtime "Debug"
         libdirs { "engine/externals/assimp/lib/Debug" }
         links { "assimp-vc143-mtd" }
+        links { "opencv_objdetect4130d", "opencv_calib3d4130d", "opencv_features2d4130d",
+                "opencv_flann4130d", "opencv_imgproc4130d", "opencv_core4130d",
+                "zlibd", "libjpeg-turbod", "libopenjp2d" }
         staticruntime "On"
 
     filter "configurations:Develop"
@@ -101,6 +109,9 @@ project "LAVI"
         runtime "Release"
         libdirs { "engine/externals/assimp/lib/Release" }
         links { "assimp-vc143-mt" }
+        links { "opencv_objdetect4130", "opencv_calib3d4130", "opencv_features2d4130",
+                "opencv_flann4130", "opencv_imgproc4130", "opencv_core4130",
+                "zlib", "libjpeg-turbo", "libopenjp2" }
         staticruntime "On"
 
     filter "configurations:Release"
@@ -109,6 +120,9 @@ project "LAVI"
         runtime "Release"
         libdirs { "engine/externals/assimp/lib/Release" }
         links { "assimp-vc143-mt" }
+        links { "opencv_objdetect4130", "opencv_calib3d4130", "opencv_features2d4130",
+                "opencv_flann4130", "opencv_imgproc4130", "opencv_core4130",
+                "zlib", "libjpeg-turbo", "libopenjp2" }
         staticruntime "On"
 
     filter "system:windows"
@@ -116,4 +130,5 @@ project "LAVI"
         systemversion "latest"
         postbuildcommands {
             '{COPY} "%{wks.location}/application/externals/curl/bin/libcurl.dll" "%{cfg.targetdir}"',
+            '{COPY} "%{wks.location}/application/externals/onnxruntime/bin/onnxruntime.dll" "%{cfg.targetdir}"',
         }

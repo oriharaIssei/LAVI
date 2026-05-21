@@ -7,6 +7,8 @@
 #include "VoiceVoxPanel.h"
 #include "VisionPanel.h"
 #include "LLMChatPanel.h"
+#include "GatekeeperManager.h"
+#include "GatekeeperPanel.h"
 
 #include "imgui/imgui.h"
 
@@ -25,6 +27,8 @@ void MediaCaptureDemoSystem::Initialize() {
     voiceVoxPanel_ = std::make_unique<VoiceVoxPanel>();
     visionPanel_ = std::make_unique<VisionPanel>();
     llmPanel_ = std::make_unique<LLMChatPanel>();
+    gkManager_ = std::make_unique<GatekeeperManager>();
+    gkPanel_ = std::make_unique<GatekeeperPanel>();
 
     micPanel_->Initialize(ctx_.get());
     camPanel_->Initialize(ctx_.get());
@@ -32,9 +36,12 @@ void MediaCaptureDemoSystem::Initialize() {
     voiceVoxPanel_->Initialize(ctx_.get());
     visionPanel_->Initialize(ctx_.get());
     llmPanel_->Initialize(ctx_.get());
+    gkManager_->Initialize(ctx_.get());
+    gkPanel_->Initialize(ctx_.get(), gkManager_.get());
 }
 
 void MediaCaptureDemoSystem::Finalize() {
+    gkPanel_->Finalize();
     llmPanel_->Finalize();
     visionPanel_->Finalize();
     voiceVoxPanel_->Finalize();
@@ -42,6 +49,8 @@ void MediaCaptureDemoSystem::Finalize() {
     camPanel_->Finalize();
     micPanel_->Finalize();
 
+    gkPanel_.reset();
+    gkManager_.reset();
     llmPanel_.reset();
     visionPanel_.reset();
     voiceVoxPanel_.reset();
@@ -57,6 +66,9 @@ void MediaCaptureDemoSystem::Update() {
         ctx_->speakFuture.get();
         ctx_->isSpeaking = false;
     }
+
+    // ゲートキーパーは UI のタブ選択に関係なく毎フレーム評価する
+    gkManager_->Update();
 
     ImGui::Begin("Media Capture Demo");
 
@@ -83,6 +95,10 @@ void MediaCaptureDemoSystem::Update() {
         }
         if (ImGui::BeginTabItem("LLM")) {
             llmPanel_->Draw();
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Gatekeeper")) {
+            gkPanel_->Draw();
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
