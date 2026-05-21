@@ -16,6 +16,14 @@ struct VoiceVoxSpeaker {
     std::string styleName;
 };
 
+struct VoiceVoxSynthParams {
+    float speedScale = 1.0f;
+    float pitchScale = 0.0f;
+    float intonationScale = 1.0f;
+    float volumeScale = 1.0f;
+    float pauseScale = 1.0f;
+};
+
 class VoiceVoxClient {
 public:
     VoiceVoxClient();
@@ -34,6 +42,7 @@ public:
     bool Speak(const std::string& text, int speakerId);
 
     std::vector<uint8_t> SynthesizeWav(const std::string& text, int speakerId);
+    std::vector<uint8_t> SynthesizeWav(const std::string& text, int speakerId, const VoiceVoxSynthParams& params);
     bool PlayWavData(const std::vector<uint8_t>& wavData);
     std::future<bool> PlayWavDataAsync(std::vector<uint8_t> wavData);
 
@@ -43,7 +52,8 @@ public:
     void SetBaseUrl(const std::string& url) { baseUrl_ = url; }
 
 private:
-    std::vector<uint8_t> Synthesize(const std::string& text, int speakerId);
+    std::vector<uint8_t> Synthesize(const std::string& text, int speakerId, const VoiceVoxSynthParams* params = nullptr);
+    static void ApplySynthParams(std::string& queryJson, const VoiceVoxSynthParams& params);
     std::string HttpGet(const std::string& url);
     std::string HttpPost(const std::string& url, const std::string& body, const std::string& contentType);
     bool PlayWav(const std::vector<uint8_t>& wavData);

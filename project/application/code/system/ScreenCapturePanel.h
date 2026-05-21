@@ -5,13 +5,7 @@
 #include <vector>
 
 #include "PreviewTextureUtil.h"
-
-namespace OriGine {
-class ScreenCapture;
-struct ScreenMonitorInfo;
-struct DxDevice;
-class DxCommand;
-}
+#include "mediaCapture/ScreenCapture.h"
 
 struct SharedMediaContext;
 

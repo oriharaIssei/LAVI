@@ -5,11 +5,7 @@
 #include <vector>
 
 #include "PreviewTextureUtil.h"
-
-namespace OriGine {
-class WebCamera;
-struct WebCameraDeviceInfo;
-}
+#include "mediaCapture/WebCamera.h"
 
 struct SharedMediaContext;
 

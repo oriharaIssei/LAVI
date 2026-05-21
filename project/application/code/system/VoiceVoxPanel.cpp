@@ -12,6 +12,12 @@ void VoiceVoxPanel::Initialize(SharedMediaContext* ctx) {
 void VoiceVoxPanel::Finalize() {
     if (voiceVox_) {
         voiceVox_->Stop();
+    }
+    if (ctx_->speakFuture.valid()) {
+        ctx_->speakFuture.wait();
+        ctx_->isSpeaking = false;
+    }
+    if (voiceVox_) {
         voiceVox_->StopEngine();
     }
     voiceVox_.reset();

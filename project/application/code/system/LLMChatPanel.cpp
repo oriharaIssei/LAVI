@@ -1,6 +1,7 @@
 #include "LLMChatPanel.h"
 #include "SharedMediaContext.h"
 #include "AppConfig.h"
+#include "EmotionTag.h"
 
 #define ENGINE_INCLUDE
 #define ENGINE_MEDIA_CAPTURE
@@ -15,10 +16,22 @@ void LLMChatPanel::Initialize(SharedMediaContext* ctx) {
 }
 
 void LLMChatPanel::Finalize() {
-    synthPipeline_.Shutdown();
     if (llmClient_) {
         llmClient_->Cancel();
     }
+    if (llmFuture_.valid()) {
+        llmFuture_.wait();
+    }
+
+    synthPipeline_.Shutdown();
+
+    if (personaClient_) {
+        personaClient_->Cancel();
+    }
+    if (personaFuture_.valid()) {
+        personaFuture_.wait();
+    }
+    personaClient_.reset();
     llmClient_.reset();
 }
 
@@ -39,7 +52,60 @@ LLMStreamCallback LLMChatPanel::MakeStreamCallback() {
     };
 }
 
-void LLMChatPanel::SendLLMRequest(const std::string& text, const std::vector<LLMClient::ImageFrame>& frames) {
+static const char* kPersonaMetaPrompt =
+    "以下のペルソナ説明から、AIアシスタント「LAVI」用のシステムプロンプトを生成してください。\n"
+    "プロンプト本文のみ出力し、それ以外の説明は一切不要です。\n"
+    "\n"
+    "## 重要な前提\n"
+    "- ペルソナ説明は「LAVI自身がどんなキャラクターか」を表す。\n"
+    "  例: 「弟」→ LAVIがユーザーの弟として振る舞う。\n"
+    "  例: 「お姉さん」→ LAVIがユーザーのお姉さんとして振る舞う。\n"
+    "- ユーザーはLAVIから見た相対的な関係になる。\n"
+    "  例: LAVIが「弟」→ ユーザーは「お兄ちゃん/お姉ちゃん」になる。\n"
+    "  例: LAVIが「メイド」→ ユーザーは「ご主人様」になる。\n"
+    "\n"
+    "## 一人称・口調の推論ガイド\n"
+    "キャラの性別・年齢・立場から自然な一人称を選ぶこと:\n"
+    "- 男性的キャラ(弟、少年、男友達等): 「僕」「オレ」「俺」など。「私」は不自然。\n"
+    "- 女性的キャラ(姉、妹、彼女等): 「私」「あたし」「うち」など。\n"
+    "- フォーマルなキャラ(執事、メイド等): 「私(わたくし)」など。\n"
+    "- 子供っぽいキャラ: 「ぼく」「あたし」、自分の名前で呼ぶなど。\n"
+    "口調も同様に、立場に合った敬語レベル・カジュアルさを推論すること。\n"
+    "- 年下キャラがユーザー(年上)に話す: タメ口寄り、甘え口調もOK。\n"
+    "- 年上キャラがユーザー(年下)に話す: 包容力ある口調、諭すような表現。\n"
+    "- 対等な関係: フランクな友達口調。\n"
+    "\n"
+    "## 生成ルール\n"
+    "- キャラクターの名前は「LAVI」固定\n"
+    "- 上記ガイドに従い一人称・ユーザーの呼び方を推論\n"
+    "- 口調・語尾の癖を具体的な台詞例3つ以上で示す\n"
+    "- 性格の長所と短所を推測\n"
+    "- 好きなもの・嫌いなものを2〜3個ずつ推測\n"
+    "- キャラに合ったフィラー(えっと、んー、あー等)を指定\n"
+    "- 短い文で区切り、読点で息継ぎリズムを作る話し方ルールを含める\n"
+    "- 以下の感情タグ定義を必ず含める:\n"
+    "  [joy] - 嬉しい・楽しい\n"
+    "  [sadness] - 悲しい・残念\n"
+    "  [surprise] - 驚き・意外\n"
+    "  [anger] - 怒り・不満\n"
+    "  [calm] - 平常・穏やか\n"
+    "  [thinking] - 考え中・迷い\n"
+    "- 感情タグ付きの出力例を6つ(各タグ1つずつ)含める\n"
+    "\n"
+    "## ペルソナ説明\n";
+
+void LLMChatPanel::GeneratePersonaPrompt() {
+    personaClient_ = std::make_unique<LLMClient>();
+    personaClient_->SetApiKey(ctx_->config.apiKey);
+    personaClient_->SetModel("claude-haiku-4-5-20251001");
+    personaClient_->SetMaxTokens(2048);
+    personaClient_->AddMessage("user", std::string(kPersonaMetaPrompt) + personaInput_);
+
+    isGeneratingPersona_ = true;
+    personaFuture_ = personaClient_->SendAsync();
+}
+
+void LLMChatPanel::SendLLMRequest(const std::string& text, const std::vector<LLMClient::ImageFrame>& frames, bool playFiller) {
     llmClient_->SetApiKey(ctx_->config.apiKey);
     llmClient_->SetSystemPrompt(ctx_->config.llmSystemPrompt);
 
@@ -56,6 +122,9 @@ void LLMChatPanel::SendLLMRequest(const std::string& text, const std::vector<LLM
         && !ctx_->voiceVoxSpeakers.empty()) {
         int speakerId = ctx_->voiceVoxSpeakers[ctx_->selectedSpeaker].id;
         synthPipeline_.StartSession(ctx_->voiceVox, speakerId);
+        if (playFiller) {
+            synthPipeline_.QueueFiller();
+        }
     }
 
     llmFuture_ = llmClient_->SendStreamAsync(MakeStreamCallback());
@@ -93,6 +162,46 @@ void LLMChatPanel::Draw() {
             return 0;
         }, &ctx_->config.llmSystemPrompt);
 
+    if (ImGui::CollapsingHeader("Persona Generator##llm")) {
+        ImGui::TextWrapped("Persona Description:");
+        ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - 110);
+        ImGui::InputText("##persona_input", personaInput_.data(), personaInput_.capacity() + 1,
+            ImGuiInputTextFlags_CallbackResize,
+            [](ImGuiInputTextCallbackData* data) -> int {
+                if (data->EventFlag == ImGuiInputTextFlags_CallbackResize) {
+                    auto* str = static_cast<std::string*>(data->UserData);
+                    str->resize(data->BufTextLen);
+                    data->Buf = str->data();
+                }
+                return 0;
+            }, &personaInput_);
+        ImGui::PopItemWidth();
+        ImGui::SameLine();
+
+        bool canGenerate = !personaInput_.empty() && !ctx_->config.apiKey.empty() && !isGeneratingPersona_;
+        if (!canGenerate) ImGui::BeginDisabled();
+        if (ImGui::Button("Generate##persona")) {
+            GeneratePersonaPrompt();
+        }
+        if (!canGenerate) ImGui::EndDisabled();
+
+        if (isGeneratingPersona_) {
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Generating...");
+        }
+
+        if (isGeneratingPersona_ && personaFuture_.valid() &&
+            personaFuture_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            LLMResponse res = personaFuture_.get();
+            if (res.success && !res.content.empty()) {
+                ctx_->config.llmSystemPrompt = res.content;
+                SaveAppConfig(ctx_->config);
+                llmClient_->ClearHistory();
+            }
+            isGeneratingPersona_ = false;
+            personaClient_.reset();
+        }
+    }
+
     ImGui::Spacing();
 
     ImGui::Text("Text Input:");
@@ -108,9 +217,13 @@ void LLMChatPanel::Draw() {
     ImGui::Checkbox("Screen##llm", &llmAttachScreen_);
 
     ImGui::Checkbox("VoiceVox Output##llm", &llmSpeakResponse_);
-    if (llmSpeakResponse_ && ctx_->voiceVoxSpeakers.empty()) {
+    if (llmSpeakResponse_) {
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "(Start VoiceVox Engine first)");
+        ImGui::Checkbox("Filler##llm", &llmPlayFiller_);
+        if (ctx_->voiceVoxSpeakers.empty()) {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "(Start VoiceVox Engine first)");
+        }
     }
 
     ImGui::Spacing();
@@ -160,15 +273,20 @@ void LLMChatPanel::Draw() {
                 ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "LAVI:");
                 ImGui::SameLine();
             }
-            ImGui::TextWrapped("%s", msg.content.c_str());
+            std::string display = (msg.role == "assistant") ? StripEmotionTag(msg.content) : msg.content;
+            ImGui::TextWrapped("%s", display.c_str());
             ImGui::Spacing();
         }
 
         if (isLLMProcessing_) {
             ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "LAVI:");
             ImGui::SameLine();
-            std::lock_guard<std::mutex> lock(llmStreamMutex_);
-            ImGui::TextWrapped("%s", llmStreamingText_.empty() ? "..." : llmStreamingText_.c_str());
+            std::string streamDisplay;
+            {
+                std::lock_guard<std::mutex> lock(llmStreamMutex_);
+                streamDisplay = StripEmotionTag(llmStreamingText_);
+            }
+            ImGui::TextWrapped("%s", streamDisplay.empty() ? "..." : streamDisplay.c_str());
         }
 
         if (llmAutoScroll_ && ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 20.0f) {
@@ -285,7 +403,7 @@ void LLMChatPanel::Draw() {
             }
         }
 
-        SendLLMRequest(llmUserInput_, frames);
+        SendLLMRequest(llmUserInput_, frames, llmPlayFiller_);
         llmUserInput_.clear();
     }
 
