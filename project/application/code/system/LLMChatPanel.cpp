@@ -182,9 +182,9 @@ void LLMChatPanel::Draw() {
     // Check async result
     if (isLLMProcessing_ && llmFuture_.valid() &&
         llmFuture_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-        LLMResponse res = llmFuture_.get();
-        if (!res.success && !res.error.empty()) {
-            llmClient_->AddMessage("assistant", "[Error] " + res.error);
+        lastLLMResponse_ = llmFuture_.get();
+        if (!lastLLMResponse_.success && !lastLLMResponse_.error.empty()) {
+            llmClient_->AddMessage("assistant", "[Error] " + lastLLMResponse_.error);
         }
         isLLMProcessing_ = false;
         llmStreamingText_.clear();
@@ -228,6 +228,16 @@ void LLMChatPanel::Draw() {
 
                 SendLLMRequest(observePrompt, frames);
             }
+        }
+    }
+
+    if (lastLLMResponse_.inputTokens > 0 || lastLLMResponse_.outputTokens > 0) {
+        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Tokens: in=%d out=%d",
+            lastLLMResponse_.inputTokens, lastLLMResponse_.outputTokens);
+        if (lastLLMResponse_.cacheReadInputTokens > 0 || lastLLMResponse_.cacheCreationInputTokens > 0) {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), " | Cache: read=%d create=%d",
+                lastLLMResponse_.cacheReadInputTokens, lastLLMResponse_.cacheCreationInputTokens);
         }
     }
 

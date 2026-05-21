@@ -26,6 +26,7 @@ private:
     std::future<LLMResponse> llmFuture_;
     bool isLLMProcessing_ = false;
     bool llmAutoScroll_ = true;
+    LLMResponse lastLLMResponse_;
     bool llmUseWhisper_ = false;
     bool llmAttachWebCam_ = false;
     bool llmAttachScreen_ = false;

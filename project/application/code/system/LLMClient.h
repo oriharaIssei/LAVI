@@ -25,6 +25,8 @@ struct LLMResponse {
     std::string error;
     int inputTokens = 0;
     int outputTokens = 0;
+    int cacheCreationInputTokens = 0;
+    int cacheReadInputTokens = 0;
 };
 
 using LLMStreamCallback = std::function<void(const std::string& delta, bool done)>;
@@ -61,7 +63,7 @@ public:
     void Cancel();
 
 private:
-    std::string BuildRequestBody() const;
+    std::string BuildRequestBody(bool stream) const;
     std::string EncodeToBase64Jpeg(const uint8_t* bgraData, uint32_t width, uint32_t height);
     LLMResponse SendRequest();
     LLMResponse SendStreamRequest(LLMStreamCallback callback);
@@ -69,10 +71,10 @@ private:
     static std::string EscapeJson(const std::string& input);
     static std::string ParseResponseContent(const std::string& json);
     static std::string ParseErrorMessage(const std::string& json);
-    static void ParseUsage(const std::string& json, int& inputTokens, int& outputTokens);
+    static void ParseUsage(const std::string& json, LLMResponse& result);
 
     std::string apiKey_;
-    std::string model_ = "claude-sonnet-4-20250514";
+    std::string model_ = "claude-haiku-4-5-20251001";
     std::string systemPrompt_;
     int maxTokens_ = 4096;
     std::vector<LLMMessage> history_;

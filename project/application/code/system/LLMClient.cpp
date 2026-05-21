@@ -42,6 +42,10 @@ struct StreamContext {
     std::string buffer;
     std::string accumulated;
     std::atomic<bool>* cancelFlag;
+    int inputTokens = 0;
+    int outputTokens = 0;
+    int cacheCreationInputTokens = 0;
+    int cacheReadInputTokens = 0;
 };
 
 size_t StreamWriteCallback(void* contents, size_t size, size_t nmemb, StreamContext* ctx) {
@@ -122,6 +126,38 @@ size_t StreamWriteCallback(void* contents, size_t size, size_t nmemb, StreamCont
                     if (ctx->callback) {
                         ctx->callback(text, false);
                     }
+                }
+            }
+
+            // message_start イベントからトークン使用量を抽出
+            if (data.find("\"message_start\"") != std::string::npos) {
+                auto extractInt = [&](const std::string& key) -> int {
+                    auto kpos = data.find("\"" + key + "\":");
+                    if (kpos == std::string::npos) return 0;
+                    kpos += key.size() + 3;
+                    while (kpos < data.size() && (data[kpos] == ' ' || data[kpos] == '\t')) ++kpos;
+                    std::string numStr;
+                    while (kpos < data.size() && data[kpos] >= '0' && data[kpos] <= '9') {
+                        numStr += data[kpos++];
+                    }
+                    return numStr.empty() ? 0 : std::stoi(numStr);
+                };
+                ctx->inputTokens = extractInt("input_tokens");
+                ctx->cacheCreationInputTokens = extractInt("cache_creation_input_tokens");
+                ctx->cacheReadInputTokens = extractInt("cache_read_input_tokens");
+            }
+
+            // message_delta イベントから出力トークン数を抽出
+            if (data.find("\"message_delta\"") != std::string::npos) {
+                auto kpos = data.find("\"output_tokens\":");
+                if (kpos != std::string::npos) {
+                    kpos += 16;
+                    while (kpos < data.size() && (data[kpos] == ' ' || data[kpos] == '\t')) ++kpos;
+                    std::string numStr;
+                    while (kpos < data.size() && data[kpos] >= '0' && data[kpos] <= '9') {
+                        numStr += data[kpos++];
+                    }
+                    if (!numStr.empty()) ctx->outputTokens = std::stoi(numStr);
                 }
             }
 
@@ -260,34 +296,56 @@ void LLMClient::Cancel() {
     cancelRequested_.store(true);
 }
 
-std::string LLMClient::BuildRequestBody() const {
+std::string LLMClient::BuildRequestBody(bool stream) const {
     std::ostringstream body;
     body << R"({"model":")" << model_ << R"(",)";
     body << R"("max_tokens":)" << maxTokens_ << ",";
 
+    if (stream) {
+        body << R"("stream":true,)";
+    }
+
     if (!systemPrompt_.empty()) {
-        body << R"("system":")" << EscapeJson(systemPrompt_) << R"(",)";
+        body << R"("system":[{"type":"text","text":")" << EscapeJson(systemPrompt_)
+             << R"(","cache_control":{"type":"ephemeral"}}],)";
     }
 
     body << R"("messages":[)";
+    size_t lastIdx = history_.empty() ? SIZE_MAX : history_.size() - 1;
+
     for (size_t i = 0; i < history_.size(); ++i) {
         const auto& msg = history_[i];
         if (i > 0) body << ",";
 
+        bool cache = (i == lastIdx);
+
         body << R"({"role":")" << msg.role << R"(","content":)";
 
         if (msg.images.empty()) {
-            body << R"(")" << EscapeJson(msg.content) << R"(")";
+            if (cache) {
+                body << R"([{"type":"text","text":")" << EscapeJson(msg.content)
+                     << R"(","cache_control":{"type":"ephemeral"}}])";
+            } else {
+                body << R"(")" << EscapeJson(msg.content) << R"(")";
+            }
         } else {
             body << "[";
             for (size_t j = 0; j < msg.images.size(); ++j) {
                 if (j > 0) body << ",";
                 body << R"({"type":"image","source":{"type":"base64","media_type":")"
                      << msg.images[j].mediaType << R"(","data":")"
-                     << msg.images[j].base64Data << R"("}})";
+                     << msg.images[j].base64Data << R"("})";
+                if (cache && msg.content.empty() && j == msg.images.size() - 1) {
+                    body << R"(,"cache_control":{"type":"ephemeral"})";
+                }
+                body << "}";
             }
             if (!msg.content.empty()) {
-                body << R"(,{"type":"text","text":")" << EscapeJson(msg.content) << R"("})";
+                body << R"(,{"type":"text","text":")" << EscapeJson(msg.content) << R"(")";
+                if (cache) {
+                    body << R"(,"cache_control":{"type":"ephemeral"})";
+                }
+                body << "}";
             }
             body << "]";
         }
@@ -299,15 +357,64 @@ std::string LLMClient::BuildRequestBody() const {
 }
 
 std::string LLMClient::EncodeToBase64Jpeg(const uint8_t* bgraData, uint32_t width, uint32_t height) {
-    std::vector<uint8_t> rgb(width * height * 3);
-    for (uint32_t i = 0; i < width * height; ++i) {
-        rgb[i * 3 + 0] = bgraData[i * 4 + 2];
-        rgb[i * 3 + 1] = bgraData[i * 4 + 1];
-        rgb[i * 3 + 2] = bgraData[i * 4 + 0];
+    constexpr uint32_t kMaxDim = 768;
+    constexpr int kJpegQuality = 50;
+
+    uint32_t dstW = width;
+    uint32_t dstH = height;
+    if (dstW > kMaxDim || dstH > kMaxDim) {
+        float scale = static_cast<float>(kMaxDim) / static_cast<float>(std::max(dstW, dstH));
+        dstW = static_cast<uint32_t>(dstW * scale);
+        dstH = static_cast<uint32_t>(dstH * scale);
+        if (dstW < 1) dstW = 1;
+        if (dstH < 1) dstH = 1;
+    }
+
+    std::vector<uint8_t> rgb(dstW * dstH * 3);
+
+    if (dstW == width && dstH == height) {
+        for (uint32_t i = 0; i < width * height; ++i) {
+            rgb[i * 3 + 0] = bgraData[i * 4 + 2];
+            rgb[i * 3 + 1] = bgraData[i * 4 + 1];
+            rgb[i * 3 + 2] = bgraData[i * 4 + 0];
+        }
+    } else {
+        float scaleX = static_cast<float>(width) / static_cast<float>(dstW);
+        float scaleY = static_cast<float>(height) / static_cast<float>(dstH);
+        for (uint32_t dy = 0; dy < dstH; ++dy) {
+            float srcY0 = dy * scaleY;
+            float srcY1 = (dy + 1) * scaleY;
+            uint32_t iy0 = static_cast<uint32_t>(srcY0);
+            uint32_t iy1 = std::min(static_cast<uint32_t>(srcY1), height);
+            if (iy1 <= iy0) iy1 = iy0 + 1;
+
+            for (uint32_t dx = 0; dx < dstW; ++dx) {
+                float srcX0 = dx * scaleX;
+                float srcX1 = (dx + 1) * scaleX;
+                uint32_t ix0 = static_cast<uint32_t>(srcX0);
+                uint32_t ix1 = std::min(static_cast<uint32_t>(srcX1), width);
+                if (ix1 <= ix0) ix1 = ix0 + 1;
+
+                uint32_t rSum = 0, gSum = 0, bSum = 0, count = 0;
+                for (uint32_t sy = iy0; sy < iy1; ++sy) {
+                    for (uint32_t sx = ix0; sx < ix1; ++sx) {
+                        uint32_t si = (sy * width + sx) * 4;
+                        bSum += bgraData[si + 0];
+                        gSum += bgraData[si + 1];
+                        rSum += bgraData[si + 2];
+                        ++count;
+                    }
+                }
+                uint32_t di = (dy * dstW + dx) * 3;
+                rgb[di + 0] = static_cast<uint8_t>(rSum / count);
+                rgb[di + 1] = static_cast<uint8_t>(gSum / count);
+                rgb[di + 2] = static_cast<uint8_t>(bSum / count);
+            }
+        }
     }
 
     JpegWriteContext ctx;
-    int ok = stbi_write_jpg_to_func(JpegWriteFunc, &ctx, static_cast<int>(width), static_cast<int>(height), 3, rgb.data(), 85);
+    int ok = stbi_write_jpg_to_func(JpegWriteFunc, &ctx, static_cast<int>(dstW), static_cast<int>(dstH), 3, rgb.data(), kJpegQuality);
     if (!ok || ctx.buffer.empty()) return "";
 
     return Base64Encode(ctx.buffer.data(), ctx.buffer.size());
@@ -320,7 +427,7 @@ LLMResponse LLMClient::SendRequest() {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         apiKey = apiKey_;
-        bodyStr = BuildRequestBody();
+        bodyStr = BuildRequestBody(false);
     }
 
     if (apiKey.empty()) {
@@ -356,7 +463,7 @@ LLMResponse LLMClient::SendRequest() {
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
         if (httpCode == 200) {
             result.content = ParseResponseContent(response);
-            ParseUsage(response, result.inputTokens, result.outputTokens);
+            ParseUsage(response, result);
             result.success = true;
         } else {
             result.error = "HTTP " + std::to_string(httpCode) + ": " + ParseErrorMessage(response);
@@ -375,42 +482,7 @@ LLMResponse LLMClient::SendStreamRequest(LLMStreamCallback callback) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         apiKey = apiKey_;
-
-        std::ostringstream body;
-        body << R"({"model":")" << model_ << R"(",)";
-        body << R"("max_tokens":)" << maxTokens_ << ",";
-        body << R"("stream":true,)";
-
-        if (!systemPrompt_.empty()) {
-            body << R"("system":")" << EscapeJson(systemPrompt_) << R"(",)";
-        }
-
-        body << R"("messages":[)";
-        for (size_t i = 0; i < history_.size(); ++i) {
-            const auto& msg = history_[i];
-            if (i > 0) body << ",";
-
-            body << R"({"role":")" << msg.role << R"(","content":)";
-
-            if (msg.images.empty()) {
-                body << R"(")" << EscapeJson(msg.content) << R"(")";
-            } else {
-                body << "[";
-                for (size_t j = 0; j < msg.images.size(); ++j) {
-                    if (j > 0) body << ",";
-                    body << R"({"type":"image","source":{"type":"base64","media_type":")"
-                         << msg.images[j].mediaType << R"(","data":")"
-                         << msg.images[j].base64Data << R"("}})";
-                }
-                if (!msg.content.empty()) {
-                    body << R"(,{"type":"text","text":")" << EscapeJson(msg.content) << R"("})";
-                }
-                body << "]";
-            }
-            body << "}";
-        }
-        body << "]}";
-        bodyStr = body.str();
+        bodyStr = BuildRequestBody(true);
     }
 
     if (apiKey.empty()) {
@@ -451,6 +523,10 @@ LLMResponse LLMClient::SendStreamRequest(LLMStreamCallback callback) {
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
         if (httpCode == 200) {
             result.content = streamCtx.accumulated;
+            result.inputTokens = streamCtx.inputTokens;
+            result.outputTokens = streamCtx.outputTokens;
+            result.cacheCreationInputTokens = streamCtx.cacheCreationInputTokens;
+            result.cacheReadInputTokens = streamCtx.cacheReadInputTokens;
             result.success = true;
         } else {
             result.error = "HTTP " + std::to_string(httpCode) + ": " + streamCtx.buffer;
@@ -540,7 +616,7 @@ std::string LLMClient::ParseErrorMessage(const std::string& json) {
     return json.substr(pos, end - pos);
 }
 
-void LLMClient::ParseUsage(const std::string& json, int& inputTokens, int& outputTokens) {
+void LLMClient::ParseUsage(const std::string& json, LLMResponse& result) {
     auto extractInt = [&](const std::string& key) -> int {
         auto pos = json.find("\"" + key + "\":");
         if (pos == std::string::npos) return 0;
@@ -552,6 +628,8 @@ void LLMClient::ParseUsage(const std::string& json, int& inputTokens, int& outpu
         }
         return numStr.empty() ? 0 : std::stoi(numStr);
     };
-    inputTokens = extractInt("input_tokens");
-    outputTokens = extractInt("output_tokens");
+    result.inputTokens = extractInt("input_tokens");
+    result.outputTokens = extractInt("output_tokens");
+    result.cacheCreationInputTokens = extractInt("cache_creation_input_tokens");
+    result.cacheReadInputTokens = extractInt("cache_read_input_tokens");
 }
