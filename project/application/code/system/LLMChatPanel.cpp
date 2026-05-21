@@ -5,6 +5,7 @@
 
 #define ENGINE_INCLUDE
 #define ENGINE_MEDIA_CAPTURE
+#define ENGINE_PROCESS_MANAGER
 #include <EngineInclude.h>
 
 #include "imgui/imgui.h"
@@ -107,12 +108,30 @@ void LLMChatPanel::GeneratePersonaPrompt() {
 
 void LLMChatPanel::SendLLMRequest(const std::string& text, const std::vector<LLMClient::ImageFrame>& frames, bool playFiller) {
     llmClient_->SetApiKey(ctx_->config.apiKey);
-    llmClient_->SetSystemPrompt(ctx_->config.llmSystemPrompt);
+
+    std::string systemPrompt = ctx_->config.llmSystemPrompt;
+    if (llmAttachAppInfo_) {
+        auto apps = OriGine::ProcessManager::EnumerateWindows();
+        std::string appText = OriGine::ProcessManager::FormatAsText(apps);
+        if (!appText.empty()) {
+            systemPrompt += "\n\n## 現在ユーザーが開いているアプリケーション\n" + appText;
+        }
+    }
+    llmClient_->SetSystemPrompt(systemPrompt);
+
+    std::string userText = text;
+    if (!frames.empty() && !llmAttachAppInfo_) {
+        auto fg = OriGine::ProcessManager::GetForegroundApp();
+        if (!fg.exeName.empty()) {
+            std::string appCtx = OriGine::ProcessManager::FormatAsText({fg});
+            userText += "\n[現在のフォアグラウンドアプリ: " + appCtx + "]";
+        }
+    }
 
     if (frames.empty()) {
-        llmClient_->AddMessage("user", text);
+        llmClient_->AddMessage("user", userText);
     } else {
-        llmClient_->AddMessageWithImages("user", text, frames);
+        llmClient_->AddMessageWithImages("user", userText, frames);
     }
 
     isLLMProcessing_ = true;
@@ -215,6 +234,8 @@ void LLMChatPanel::Draw() {
     ImGui::Checkbox("WebCam##llm", &llmAttachWebCam_);
     ImGui::SameLine();
     ImGui::Checkbox("Screen##llm", &llmAttachScreen_);
+    ImGui::SameLine();
+    ImGui::Checkbox("Apps##llm", &llmAttachAppInfo_);
 
     ImGui::Checkbox("VoiceVox Output##llm", &llmSpeakResponse_);
     if (llmSpeakResponse_) {

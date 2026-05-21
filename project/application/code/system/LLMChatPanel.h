@@ -36,6 +36,8 @@ private:
     bool llmPlayFiller_ = true;
     SpeechSynthesisPipeline synthPipeline_;
 
+    bool llmAttachAppInfo_ = false;
+
     bool llmAutoObserve_ = false;
     bool llmAutoObserveWebCam_ = true;
     bool llmAutoObserveScreen_ = false;
