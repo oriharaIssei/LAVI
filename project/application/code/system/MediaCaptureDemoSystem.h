@@ -11,6 +11,8 @@ class ScreenCapturePanel;
 class VoiceVoxPanel;
 class VisionPanel;
 class LLMChatPanel;
+class GatekeeperManager;
+class GatekeeperPanel;
 
 class MediaCaptureDemoSystem
     : public OriGine::ISystem
@@ -33,4 +35,6 @@ private:
     std::unique_ptr<VoiceVoxPanel> voiceVoxPanel_;
     std::unique_ptr<VisionPanel> visionPanel_;
     std::unique_ptr<LLMChatPanel> llmPanel_;
+    std::unique_ptr<GatekeeperManager> gkManager_;
+    std::unique_ptr<GatekeeperPanel> gkPanel_;
 };
