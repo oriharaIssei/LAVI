@@ -135,7 +135,16 @@ void VoiceVoxClient::ShutdownXAudio2() {
 }
 
 bool VoiceVoxClient::StartEngine(const std::string& enginePath) {
+    lastError_.clear();
+    externalEngine_ = false;
+
     if (IsEngineRunning()) return true;
+
+    // 既にポート上で起動済みのインスタンスがあれば再利用
+    if (IsEngineReady()) {
+        externalEngine_ = true;
+        return true;
+    }
 
     STARTUPINFOA si{};
     si.cb = sizeof(si);
@@ -152,6 +161,10 @@ bool VoiceVoxClient::StartEngine(const std::string& enginePath) {
         CREATE_NO_WINDOW,
         nullptr, nullptr,
         &si, &pi)) {
+        DWORD err = GetLastError();
+        char buf[128];
+        snprintf(buf, sizeof(buf), "CreateProcess failed (error %lu)", err);
+        lastError_ = buf;
         return false;
     }
 
@@ -161,24 +174,49 @@ bool VoiceVoxClient::StartEngine(const std::string& enginePath) {
     // Wait for engine to become ready (up to 30 seconds)
     for (int i = 0; i < 60; ++i) {
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+        // プロセスが終了していたら即座にエラー
+        if (!IsEngineRunning()) {
+            DWORD exitCode = GetEngineExitCode();
+            char buf[128];
+            snprintf(buf, sizeof(buf), "Engine process exited (code %lu)", exitCode);
+            lastError_ = buf;
+            CloseHandle(engineProcess_);
+            engineProcess_ = nullptr;
+            return false;
+        }
+
         if (IsEngineReady()) return true;
     }
+
+    lastError_ = "Engine startup timeout (30s)";
     return false;
 }
 
 void VoiceVoxClient::StopEngine() {
     if (engineProcess_) {
-        TerminateProcess(engineProcess_, 0);
+        if (!externalEngine_) {
+            TerminateProcess(engineProcess_, 0);
+        }
         CloseHandle(engineProcess_);
         engineProcess_ = nullptr;
     }
+    externalEngine_ = false;
 }
 
 bool VoiceVoxClient::IsEngineRunning() const {
+    if (externalEngine_) return IsEngineReady();
     if (!engineProcess_) return false;
     DWORD exitCode = 0;
     if (!GetExitCodeProcess(engineProcess_, &exitCode)) return false;
     return exitCode == STILL_ACTIVE;
+}
+
+DWORD VoiceVoxClient::GetEngineExitCode() const {
+    if (!engineProcess_) return 0;
+    DWORD exitCode = 0;
+    GetExitCodeProcess(engineProcess_, &exitCode);
+    return exitCode;
 }
 
 bool VoiceVoxClient::IsEngineReady() const {
@@ -246,6 +284,20 @@ bool VoiceVoxClient::Speak(const std::string& text, int speakerId) {
     auto wavData = Synthesize(text, speakerId);
     if (wavData.empty()) return false;
     return PlayWav(wavData);
+}
+
+std::vector<uint8_t> VoiceVoxClient::SynthesizeWav(const std::string& text, int speakerId) {
+    return Synthesize(text, speakerId);
+}
+
+bool VoiceVoxClient::PlayWavData(const std::vector<uint8_t>& wavData) {
+    return PlayWav(wavData);
+}
+
+std::future<bool> VoiceVoxClient::PlayWavDataAsync(std::vector<uint8_t> wavData) {
+    return std::async(std::launch::async, [this, data = std::move(wavData)]() {
+        return PlayWav(data);
+    });
 }
 
 std::vector<uint8_t> VoiceVoxClient::Synthesize(const std::string& text, int speakerId) {

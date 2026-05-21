@@ -24,6 +24,7 @@
 
 # API設定 (APIキーを含むため)
 /project/application/resource/api_config.json
+/project/application/resource/GlobalVariables/Settings/ApiConfig.json
 
 # VoiceVox Engine ランタイム (各自 7z から展開)
 /project/application/resource/voiceVox/windows-nvidia/
