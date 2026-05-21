@@ -22,6 +22,16 @@
 # whisper.cpp ビルド成果物 (各自 build_whisper_cuda.bat でビルド)
 /project/application/externals/whisper.cpp/build_cuda*/
 
+# ONNX Runtime プレビルド (各自 setup_onnxruntime.bat で配置)
+/project/application/externals/onnxruntime/
+
+# OpenCV 静的ビルド成果物・ソース (各自 build_opencv.bat でビルド)
+/project/application/externals/opencv/
+/project/application/externals/opencv-*/
+
+# ゲートキーパー用モデル (各自 setup_gatekeeper_models.bat で配置)
+/project/application/resource/gatekeeper/
+
 # API設定 (APIキーを含むため)
 /project/application/resource/api_config.json
 /project/application/resource/GlobalVariables/Settings/ApiConfig.json
