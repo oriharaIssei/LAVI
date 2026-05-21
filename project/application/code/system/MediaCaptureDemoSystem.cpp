@@ -7,6 +7,8 @@
 #include "VoiceVoxPanel.h"
 #include "VisionPanel.h"
 #include "LLMChatPanel.h"
+#include "CameraGatekeeperPanel.h"
+#include "ScreenGatekeeperPanel.h"
 
 #include "imgui/imgui.h"
 
@@ -25,6 +27,8 @@ void MediaCaptureDemoSystem::Initialize() {
     voiceVoxPanel_ = std::make_unique<VoiceVoxPanel>();
     visionPanel_ = std::make_unique<VisionPanel>();
     llmPanel_ = std::make_unique<LLMChatPanel>();
+    camGkPanel_ = std::make_unique<CameraGatekeeperPanel>();
+    screenGkPanel_ = std::make_unique<ScreenGatekeeperPanel>();
 
     micPanel_->Initialize(ctx_.get());
     camPanel_->Initialize(ctx_.get());
@@ -32,9 +36,13 @@ void MediaCaptureDemoSystem::Initialize() {
     voiceVoxPanel_->Initialize(ctx_.get());
     visionPanel_->Initialize(ctx_.get());
     llmPanel_->Initialize(ctx_.get());
+    camGkPanel_->Initialize(ctx_.get());
+    screenGkPanel_->Initialize(ctx_.get());
 }
 
 void MediaCaptureDemoSystem::Finalize() {
+    screenGkPanel_->Finalize();
+    camGkPanel_->Finalize();
     llmPanel_->Finalize();
     visionPanel_->Finalize();
     voiceVoxPanel_->Finalize();
@@ -42,6 +50,8 @@ void MediaCaptureDemoSystem::Finalize() {
     camPanel_->Finalize();
     micPanel_->Finalize();
 
+    screenGkPanel_.reset();
+    camGkPanel_.reset();
     llmPanel_.reset();
     visionPanel_.reset();
     voiceVoxPanel_.reset();
@@ -83,6 +93,14 @@ void MediaCaptureDemoSystem::Update() {
         }
         if (ImGui::BeginTabItem("LLM")) {
             llmPanel_->Draw();
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("CameraGK")) {
+            camGkPanel_->Draw();
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("ScreenGK")) {
+            screenGkPanel_->Draw();
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
