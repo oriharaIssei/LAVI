@@ -363,7 +363,7 @@ std::string LLMClient::EncodeToBase64Jpeg(const uint8_t* bgraData, uint32_t widt
     uint32_t dstW = width;
     uint32_t dstH = height;
     if (dstW > kMaxDim || dstH > kMaxDim) {
-        float scale = static_cast<float>(kMaxDim) / static_cast<float>(std::max(dstW, dstH));
+        float scale = static_cast<float>(kMaxDim) / static_cast<float>((std::max)(dstW, dstH));
         dstW = static_cast<uint32_t>(dstW * scale);
         dstH = static_cast<uint32_t>(dstH * scale);
         if (dstW < 1) dstW = 1;
@@ -385,14 +385,14 @@ std::string LLMClient::EncodeToBase64Jpeg(const uint8_t* bgraData, uint32_t widt
             float srcY0 = dy * scaleY;
             float srcY1 = (dy + 1) * scaleY;
             uint32_t iy0 = static_cast<uint32_t>(srcY0);
-            uint32_t iy1 = std::min(static_cast<uint32_t>(srcY1), height);
+            uint32_t iy1 = (std::min)(static_cast<uint32_t>(srcY1), height);
             if (iy1 <= iy0) iy1 = iy0 + 1;
 
             for (uint32_t dx = 0; dx < dstW; ++dx) {
                 float srcX0 = dx * scaleX;
                 float srcX1 = (dx + 1) * scaleX;
                 uint32_t ix0 = static_cast<uint32_t>(srcX0);
-                uint32_t ix1 = std::min(static_cast<uint32_t>(srcX1), width);
+                uint32_t ix1 = (std::min)(static_cast<uint32_t>(srcX1), width);
                 if (ix1 <= ix0) ix1 = ix0 + 1;
 
                 uint32_t rSum = 0, gSum = 0, bSum = 0, count = 0;

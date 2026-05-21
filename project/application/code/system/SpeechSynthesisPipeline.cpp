@@ -1,5 +1,6 @@
 #include "SpeechSynthesisPipeline.h"
 #include "VoiceVoxClient.h"
+#include "EmotionTag.h"
 
 #include <cstring>
 
@@ -11,6 +12,7 @@ void SpeechSynthesisPipeline::StartSession(VoiceVoxClient* voiceVox, int speaker
     Shutdown();
 
     sentenceBuffer_.clear();
+    currentEmotion_ = EmotionTag::None;
     {
         std::lock_guard<std::mutex> lock(speechQueueMutex_);
         speechQueue_.clear();
@@ -22,8 +24,18 @@ void SpeechSynthesisPipeline::StartSession(VoiceVoxClient* voiceVox, int speaker
 
     workerRunning_.store(true);
     synthWorker_ = std::thread([this, voiceVox, speakerId]() {
+        auto synthesizeOne = [&](const std::string& sentence, EmotionTag emotion) {
+            VoiceVoxSynthParams params = EmotionToSynthParams(emotion);
+            auto wav = voiceVox->SynthesizeWav(sentence, speakerId, params);
+            if (!wav.empty()) {
+                std::lock_guard<std::mutex> lock(synthesizedMutex_);
+                synthesizedQueue_.push_back(std::move(wav));
+            }
+        };
+
         while (workerRunning_.load()) {
             std::string sentence;
+            EmotionTag emotion = EmotionTag::None;
             {
                 std::unique_lock<std::mutex> lock(speechQueueMutex_);
                 speechQueueCV_.wait_for(lock, std::chrono::milliseconds(100), [this]() {
@@ -31,30 +43,43 @@ void SpeechSynthesisPipeline::StartSession(VoiceVoxClient* voiceVox, int speaker
                 });
                 if (!workerRunning_.load() && speechQueue_.empty()) break;
                 if (speechQueue_.empty()) continue;
-                sentence = std::move(speechQueue_.front());
+                sentence = std::move(speechQueue_.front().first);
+                emotion = speechQueue_.front().second;
                 speechQueue_.pop_front();
             }
-            auto wav = voiceVox->SynthesizeWav(sentence, speakerId);
-            if (!wav.empty()) {
-                std::lock_guard<std::mutex> lock(synthesizedMutex_);
-                synthesizedQueue_.push_back(std::move(wav));
-            }
+            synthesizeOne(sentence, emotion);
         }
         while (true) {
             std::string sentence;
+            EmotionTag emotion = EmotionTag::None;
             {
                 std::lock_guard<std::mutex> lock(speechQueueMutex_);
                 if (speechQueue_.empty()) break;
-                sentence = std::move(speechQueue_.front());
+                sentence = std::move(speechQueue_.front().first);
+                emotion = speechQueue_.front().second;
                 speechQueue_.pop_front();
             }
-            auto wav = voiceVox->SynthesizeWav(sentence, speakerId);
-            if (!wav.empty()) {
-                std::lock_guard<std::mutex> lock(synthesizedMutex_);
-                synthesizedQueue_.push_back(std::move(wav));
-            }
+            synthesizeOne(sentence, emotion);
         }
     });
+}
+
+void SpeechSynthesisPipeline::QueueFiller() {
+    static const char* kFillers[] = {
+        "\xe3\x81\x88\xe3\x81\xa3\xe3\x81\xa8",       // えっと
+        "\xe3\x82\x93\xe3\x83\xbc",                     // んー
+        "\xe3\x81\x82\xe3\x83\xbc",                     // あー
+    };
+    static int sIndex = 0;
+
+    const char* filler = kFillers[sIndex % 3];
+    sIndex++;
+
+    {
+        std::lock_guard<std::mutex> lock(speechQueueMutex_);
+        speechQueue_.push_back({filler, EmotionTag::Thinking});
+    }
+    speechQueueCV_.notify_one();
 }
 
 void SpeechSynthesisPipeline::FeedDelta(const std::string& delta) {
@@ -81,10 +106,18 @@ void SpeechSynthesisPipeline::FeedDelta(const std::string& delta) {
         sentenceBuffer_ = sentenceBuffer_.substr(splitPos);
         while (!sentenceBuffer_.empty() && (sentenceBuffer_[0] == '\n' || sentenceBuffer_[0] == ' '))
             sentenceBuffer_.erase(0, 1);
+
+        size_t tagEnd = 0;
+        EmotionTag tag = ParseEmotionTag(sentence, tagEnd);
+        if (tag != EmotionTag::None) {
+            currentEmotion_ = tag;
+            sentence = sentence.substr(tagEnd);
+        }
+
         if (!sentence.empty()) {
             {
                 std::lock_guard<std::mutex> lock(speechQueueMutex_);
-                speechQueue_.push_back(std::move(sentence));
+                speechQueue_.push_back({std::move(sentence), currentEmotion_});
             }
             speechQueueCV_.notify_one();
         }
@@ -93,11 +126,19 @@ void SpeechSynthesisPipeline::FeedDelta(const std::string& delta) {
 
 void SpeechSynthesisPipeline::FeedDone() {
     if (!sentenceBuffer_.empty()) {
-        {
-            std::lock_guard<std::mutex> lock(speechQueueMutex_);
-            speechQueue_.push_back(std::move(sentenceBuffer_));
+        size_t tagEnd = 0;
+        EmotionTag tag = ParseEmotionTag(sentenceBuffer_, tagEnd);
+        if (tag != EmotionTag::None) {
+            currentEmotion_ = tag;
+            sentenceBuffer_ = sentenceBuffer_.substr(tagEnd);
         }
-        speechQueueCV_.notify_one();
+        if (!sentenceBuffer_.empty()) {
+            {
+                std::lock_guard<std::mutex> lock(speechQueueMutex_);
+                speechQueue_.push_back({std::move(sentenceBuffer_), currentEmotion_});
+            }
+            speechQueueCV_.notify_one();
+        }
         sentenceBuffer_.clear();
     }
 }

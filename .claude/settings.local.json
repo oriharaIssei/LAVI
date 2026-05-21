@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//home/ira34/.claude/**)",
+      "Bash(mkdir -p /mnt/c/Users/ira34/source/repos/LAVI/.claude/commands)"
+    ]
+  }
+}

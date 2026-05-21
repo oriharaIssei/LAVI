@@ -290,6 +290,10 @@ std::vector<uint8_t> VoiceVoxClient::SynthesizeWav(const std::string& text, int 
     return Synthesize(text, speakerId);
 }
 
+std::vector<uint8_t> VoiceVoxClient::SynthesizeWav(const std::string& text, int speakerId, const VoiceVoxSynthParams& params) {
+    return Synthesize(text, speakerId, &params);
+}
+
 bool VoiceVoxClient::PlayWavData(const std::vector<uint8_t>& wavData) {
     return PlayWav(wavData);
 }
@@ -300,12 +304,17 @@ std::future<bool> VoiceVoxClient::PlayWavDataAsync(std::vector<uint8_t> wavData)
     });
 }
 
-std::vector<uint8_t> VoiceVoxClient::Synthesize(const std::string& text, int speakerId) {
+std::vector<uint8_t> VoiceVoxClient::Synthesize(const std::string& text, int speakerId, const VoiceVoxSynthParams* params) {
     // Step 1: audio_query
     std::string queryUrl = baseUrl_ + "/audio_query?text=" + UrlEncode(text)
                          + "&speaker=" + std::to_string(speakerId);
     std::string queryJson = HttpPost(queryUrl, "", "application/json");
     if (queryJson.empty()) return {};
+
+    // Step 1.5: apply emotion/synth params
+    if (params) {
+        ApplySynthParams(queryJson, *params);
+    }
 
     // Step 2: synthesis
     std::string synthUrl = baseUrl_ + "/synthesis?speaker=" + std::to_string(speakerId);
@@ -436,4 +445,69 @@ std::string VoiceVoxClient::HttpPost(const std::string& url, const std::string& 
     if (headers) curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
     return (res == CURLE_OK) ? response : "";
+}
+
+void VoiceVoxClient::ApplySynthParams(std::string& json, const VoiceVoxSynthParams& params) {
+    auto readFloat = [&](const std::string& key) -> float {
+        std::string search = "\"" + key + "\":";
+        auto pos = json.find(search);
+        if (pos == std::string::npos) return 0.0f;
+        pos += search.size();
+        while (pos < json.size() && json[pos] == ' ') ++pos;
+        try {
+            return std::stof(json.substr(pos));
+        } catch (...) {
+            return 0.0f;
+        }
+    };
+
+    auto writeFloat = [&](const std::string& key, float value) {
+        std::string search = "\"" + key + "\":";
+        auto pos = json.find(search);
+        if (pos == std::string::npos) return;
+        pos += search.size();
+        while (pos < json.size() && json[pos] == ' ') ++pos;
+        auto end = pos;
+        while (end < json.size() && json[end] != ',' && json[end] != '}') ++end;
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%.2f", value);
+        json.replace(pos, end - pos, buf);
+    };
+
+    writeFloat("speedScale", readFloat("speedScale") * params.speedScale);
+    writeFloat("pitchScale", readFloat("pitchScale") + params.pitchScale);
+    writeFloat("intonationScale", readFloat("intonationScale") * params.intonationScale);
+    writeFloat("volumeScale", readFloat("volumeScale") * params.volumeScale);
+
+    if (params.pauseScale != 1.0f) {
+        size_t searchFrom = 0;
+        while (true) {
+            auto pausePos = json.find("\"pause_mora\":{", searchFrom);
+            if (pausePos == std::string::npos) break;
+
+            auto blockEnd = json.find("}", pausePos + 14);
+            if (blockEnd == std::string::npos) break;
+
+            auto vlKey = json.find("\"vowel_length\":", pausePos);
+            if (vlKey != std::string::npos && vlKey < blockEnd) {
+                size_t valStart = vlKey + 15;
+                while (valStart < json.size() && json[valStart] == ' ') ++valStart;
+                size_t valEnd = valStart;
+                while (valEnd < json.size() && json[valEnd] != ',' && json[valEnd] != '}') ++valEnd;
+
+                try {
+                    float cur = std::stof(json.substr(valStart, valEnd - valStart));
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "%.4f", cur * params.pauseScale);
+                    std::string rep(buf);
+                    json.replace(valStart, valEnd - valStart, rep);
+                    searchFrom = valStart + rep.size();
+                } catch (...) {
+                    searchFrom = blockEnd + 1;
+                }
+            } else {
+                searchFrom = blockEnd + 1;
+            }
+        }
+    }
 }

@@ -33,6 +33,7 @@ private:
     std::mutex llmStreamMutex_;
 
     bool llmSpeakResponse_ = false;
+    bool llmPlayFiller_ = true;
     SpeechSynthesisPipeline synthPipeline_;
 
     bool llmAutoObserve_ = false;
@@ -41,6 +42,12 @@ private:
     float llmAutoObserveInterval_ = 10.0f;
     std::chrono::steady_clock::time_point llmAutoObserveLastTime_;
 
-    void SendLLMRequest(const std::string& text, const std::vector<LLMClient::ImageFrame>& frames);
+    void SendLLMRequest(const std::string& text, const std::vector<LLMClient::ImageFrame>& frames, bool playFiller = false);
     LLMStreamCallback MakeStreamCallback();
+
+    std::string personaInput_;
+    std::unique_ptr<LLMClient> personaClient_;
+    std::future<LLMResponse> personaFuture_;
+    bool isGeneratingPersona_ = false;
+    void GeneratePersonaPrompt();
 };

@@ -5,8 +5,6 @@
 
 #include "directX12/DxDescriptor.h"
 
-namespace OriGine { class DxSrvHeap; class DxCommand; }
-
 struct PreviewTexture {
     Microsoft::WRL::ComPtr<ID3D12Resource> texture;
     Microsoft::WRL::ComPtr<ID3D12Resource> uploadBuffer;

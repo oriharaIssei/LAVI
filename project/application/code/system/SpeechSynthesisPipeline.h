@@ -7,7 +7,10 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
+
+#include "EmotionTag.h"
 
 class VoiceVoxClient;
 
@@ -17,6 +20,7 @@ public:
     ~SpeechSynthesisPipeline();
 
     void StartSession(VoiceVoxClient* voiceVox, int speakerId);
+    void QueueFiller();
     void FeedDelta(const std::string& delta);
     void FeedDone();
     void StopWorker();
@@ -27,8 +31,9 @@ public:
 
 private:
     std::string sentenceBuffer_;
+    EmotionTag currentEmotion_ = EmotionTag::None;
 
-    std::deque<std::string> speechQueue_;
+    std::deque<std::pair<std::string, EmotionTag>> speechQueue_;
     std::mutex speechQueueMutex_;
     std::condition_variable speechQueueCV_;
 
