@@ -42,6 +42,14 @@ public:
     void AddMessage(const std::string& role, const std::string& content);
     void AddMessageWithImage(const std::string& role, const std::string& text,
                              const uint8_t* bgraData, uint32_t width, uint32_t height);
+
+    struct ImageFrame {
+        const uint8_t* data;
+        uint32_t width;
+        uint32_t height;
+    };
+    void AddMessageWithImages(const std::string& role, const std::string& text,
+                              const std::vector<ImageFrame>& frames);
     void ClearHistory();
     const std::vector<LLMMessage>& GetHistory() const { return history_; }
 

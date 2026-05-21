@@ -25,11 +25,17 @@ public:
     void StopEngine();
     bool IsEngineRunning() const;
     bool IsEngineReady() const;
+    const std::string& GetLastErrorMessage() const { return lastError_; }
+    DWORD GetEngineExitCode() const;
 
     std::vector<VoiceVoxSpeaker> GetSpeakers();
 
     std::future<bool> SpeakAsync(const std::string& text, int speakerId);
     bool Speak(const std::string& text, int speakerId);
+
+    std::vector<uint8_t> SynthesizeWav(const std::string& text, int speakerId);
+    bool PlayWavData(const std::vector<uint8_t>& wavData);
+    std::future<bool> PlayWavDataAsync(std::vector<uint8_t> wavData);
 
     bool IsPlaying() const;
     void Stop();
@@ -55,4 +61,6 @@ private:
     std::atomic<bool> isPlaying_{false};
 
     mutable std::mutex mutex_;
+    std::string lastError_;
+    bool externalEngine_ = false;
 };

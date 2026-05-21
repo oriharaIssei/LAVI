@@ -83,6 +83,7 @@ void MediaCaptureDemoSystem::Initialize()
 	voiceVox_ = std::make_unique<VoiceVoxClient>();
 	visionAnalyzer_ = std::make_unique<VisionAnalyzer>();
 	llmClient_ = std::make_unique<LLMClient>();
+	llmAutoObserveLastTime_ = std::chrono::steady_clock::now();
 
 	micDevices_ = OriGine::Microphone::EnumerateDevices();
 	camDevices_ = OriGine::WebCamera::EnumerateDevices();
@@ -150,6 +151,9 @@ void MediaCaptureDemoSystem::Finalize()
 		voiceVox_->StopEngine();
 	}
 	voiceVox_.reset();
+	llmSynthWorkerRunning_.store(false);
+	llmSpeechQueueCV_.notify_one();
+	if (llmSynthWorker_.joinable()) llmSynthWorker_.join();
 	if (llmClient_)
 	{
 		llmClient_->Cancel();
@@ -165,6 +169,14 @@ void MediaCaptureDemoSystem::Finalize()
 
 void MediaCaptureDemoSystem::Update()
 {
+	// speakFuture_ 完了チェック（タブに依存しないようここで実行）
+	if (isSpeaking_ && speakFuture_.valid() &&
+		speakFuture_.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+	{
+		speakFuture_.get();
+		isSpeaking_ = false;
+	}
+
 	ImGui::Begin("Media Capture Demo");
 
 	if (ImGui::BeginTabBar("MediaTabs"))
@@ -655,6 +667,10 @@ void MediaCaptureDemoSystem::DrawScreenCapturePanel()
 				screenCapture_->StartCapture();
 			}
 		}
+		if (!screenCapture_->GetLastError().empty())
+		{
+			ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Error: %s", screenCapture_->GetLastError().c_str());
+		}
 	}
 	else
 	{
@@ -718,6 +734,10 @@ void MediaCaptureDemoSystem::DrawVoiceVoxPanel()
 			{
 				voiceVoxSpeakers_ = voiceVox_->GetSpeakers();
 			}
+		}
+		if (!voiceVox_->GetLastErrorMessage().empty())
+		{
+			ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Error: %s", voiceVox_->GetLastErrorMessage().c_str());
 		}
 	}
 	else
@@ -784,14 +804,6 @@ void MediaCaptureDemoSystem::DrawVoiceVoxPanel()
 			return 0; }, &voiceVoxText_);
 
 	ImGui::Spacing();
-
-	// Check async result
-	if (isSpeaking_ && speakFuture_.valid() &&
-		speakFuture_.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
-	{
-		speakFuture_.get();
-		isSpeaking_ = false;
-	}
 
 	// Speak button
 	bool canSpeak = !voiceVoxText_.empty() && !voiceVoxSpeakers_.empty() && !isSpeaking_;
@@ -1038,7 +1050,42 @@ void MediaCaptureDemoSystem::DrawLLMPanel()
 	ImGui::SameLine();
 	ImGui::Checkbox("Screen##llm", &llmAttachScreen_);
 
+	// Output
+	ImGui::Checkbox("VoiceVox Output##llm", &llmSpeakResponse_);
+	if (llmSpeakResponse_ && voiceVoxSpeakers_.empty())
+	{
+		ImGui::SameLine();
+		ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "(Start VoiceVox Engine first)");
+	}
+
 	ImGui::Spacing();
+
+	// 自律観察モード
+	if (ImGui::CollapsingHeader("Auto Observe##llm"))
+	{
+		ImGui::Checkbox("Enable##auto_observe", &llmAutoObserve_);
+		if (llmAutoObserve_ && !llmAutoObserve_)
+		{
+			llmAutoObserveLastTime_ = std::chrono::steady_clock::now();
+		}
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(100);
+		ImGui::SliderFloat("Interval (s)##auto_observe", &llmAutoObserveInterval_, 3.0f, 60.0f, "%.0f");
+
+		ImGui::Checkbox("WebCam##auto_obs", &llmAutoObserveWebCam_);
+		ImGui::SameLine();
+		ImGui::Checkbox("Screen##auto_obs", &llmAutoObserveScreen_);
+
+		if (llmAutoObserve_)
+		{
+			auto now = std::chrono::steady_clock::now();
+			float elapsed = std::chrono::duration<float>(now - llmAutoObserveLastTime_).count();
+			float remaining = llmAutoObserveInterval_ - elapsed;
+			if (remaining < 0) remaining = 0;
+			ImGui::Text("Next observation in: %.1f s", remaining);
+		}
+	}
+
 	ImGui::Separator();
 
 	// Chat history display
@@ -1057,7 +1104,8 @@ void MediaCaptureDemoSystem::DrawLLMPanel()
 				ImGui::SameLine();
 				if (!msg.images.empty())
 				{
-					ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "[Image]");
+					ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "[Image x%d]",
+						static_cast<int>(msg.images.size()));
 					ImGui::SameLine();
 				}
 			}
@@ -1101,6 +1149,196 @@ void MediaCaptureDemoSystem::DrawLLMPanel()
 		llmStreamingText_.clear();
 	}
 
+	// 合成ワーカー起動: LLMストリーミング開始時にスレッド起動、終了まで待機ループ
+	if (llmSpeakResponse_ && isLLMProcessing_ && voiceVox_ && voiceVox_->IsEngineReady()
+		&& !voiceVoxSpeakers_.empty() && !llmSynthWorkerRunning_.load())
+	{
+		if (llmSynthWorker_.joinable()) llmSynthWorker_.join();
+		llmSynthWorkerRunning_.store(true);
+		int speakerId = voiceVoxSpeakers_[selectedSpeaker_].id;
+		llmSynthWorker_ = std::thread([this, speakerId]()
+		{
+			while (llmSynthWorkerRunning_.load())
+			{
+				std::string sentence;
+				{
+					std::unique_lock<std::mutex> lock(llmSpeechQueueMutex_);
+					llmSpeechQueueCV_.wait_for(lock, std::chrono::milliseconds(100), [this]()
+					{
+						return !llmSpeechQueue_.empty() || !llmSynthWorkerRunning_.load();
+					});
+					if (!llmSynthWorkerRunning_.load() && llmSpeechQueue_.empty()) break;
+					if (llmSpeechQueue_.empty()) continue;
+					sentence = std::move(llmSpeechQueue_.front());
+					llmSpeechQueue_.pop_front();
+				}
+				auto wav = voiceVox_->SynthesizeWav(sentence, speakerId);
+				if (!wav.empty())
+				{
+					std::lock_guard<std::mutex> lock(llmSynthesizedMutex_);
+					llmSynthesizedQueue_.push_back(std::move(wav));
+				}
+			}
+			// drain remaining
+			while (true)
+			{
+				std::string sentence;
+				{
+					std::lock_guard<std::mutex> lock(llmSpeechQueueMutex_);
+					if (llmSpeechQueue_.empty()) break;
+					sentence = std::move(llmSpeechQueue_.front());
+					llmSpeechQueue_.pop_front();
+				}
+				auto wav = voiceVox_->SynthesizeWav(sentence, speakerId);
+				if (!wav.empty())
+				{
+					std::lock_guard<std::mutex> lock(llmSynthesizedMutex_);
+					llmSynthesizedQueue_.push_back(std::move(wav));
+				}
+			}
+		});
+	}
+
+	// LLMストリーミング完了時にワーカー停止
+	if (!isLLMProcessing_ && llmSynthWorkerRunning_.load())
+	{
+		llmSynthWorkerRunning_.store(false);
+		llmSpeechQueueCV_.notify_one();
+	}
+
+	// 合成済みWAVキューから順次再生
+	if (!isSpeaking_ && voiceVox_)
+	{
+		std::lock_guard<std::mutex> lock(llmSynthesizedMutex_);
+		if (!llmSynthesizedQueue_.empty())
+		{
+			auto wav = std::move(llmSynthesizedQueue_.front());
+			llmSynthesizedQueue_.pop_front();
+			isSpeaking_ = true;
+			speakFuture_ = voiceVox_->PlayWavDataAsync(std::move(wav));
+		}
+	}
+
+	// 自律観察モード: 定期的にキャプチャしてLLMへ送信
+	if (llmAutoObserve_ && !isLLMProcessing_ && !visionApiKey_.empty())
+	{
+		auto now = std::chrono::steady_clock::now();
+		float elapsed = std::chrono::duration<float>(now - llmAutoObserveLastTime_).count();
+		if (elapsed >= llmAutoObserveInterval_)
+		{
+			llmAutoObserveLastTime_ = now;
+
+			std::vector<LLMClient::ImageFrame> frames;
+
+			if (llmAutoObserveWebCam_ && webCamera_ && webCamera_->IsCapturing())
+			{
+				uint32_t fw = 0, fh = 0;
+				if (webCamera_->GetLatestFrame(camFrameBuffer_, fw, fh) && fw > 0 && fh > 0)
+				{
+					frames.push_back({camFrameBuffer_.data(), fw, fh});
+				}
+			}
+			if (llmAutoObserveScreen_ && screenCapture_ && screenCapture_->IsCapturing())
+			{
+				uint32_t fw = 0, fh = 0;
+				if (screenCapture_->GetLatestFrame(screenFrameBuffer_, fw, fh) && fw > 0 && fh > 0)
+				{
+					frames.push_back({screenFrameBuffer_.data(), fw, fh});
+				}
+			}
+
+			if (!frames.empty())
+			{
+				llmClient_->SetApiKey(visionApiKey_);
+				llmClient_->SetSystemPrompt(llmSystemPrompt_);
+
+				std::string observePrompt =
+					"[自律観察] 今のカメラ/画面の様子を見てください。"
+					"何か気になること、面白いこと、コメントしたいことがあれば自然に話しかけてください。"
+					"特に何もなければ「特になし」とだけ答えてください。";
+
+				llmClient_->AddMessageWithImages("user", observePrompt, frames);
+
+				isLLMProcessing_ = true;
+				llmStreamingText_.clear();
+
+				llmSentenceBuffer_.clear();
+				llmSynthWorkerRunning_.store(false);
+				llmSpeechQueueCV_.notify_one();
+				if (llmSynthWorker_.joinable()) llmSynthWorker_.join();
+				{
+					std::lock_guard<std::mutex> lock(llmSpeechQueueMutex_);
+					llmSpeechQueue_.clear();
+				}
+				{
+					std::lock_guard<std::mutex> lock(llmSynthesizedMutex_);
+					llmSynthesizedQueue_.clear();
+				}
+				llmFuture_ = llmClient_->SendStreamAsync([this](const std::string &delta, bool done)
+				{
+					if (!done)
+					{
+						std::lock_guard<std::mutex> lock(llmStreamMutex_);
+						llmStreamingText_ += delta;
+					}
+					if (llmSpeakResponse_ && voiceVox_ && voiceVox_->IsEngineReady() && !voiceVoxSpeakers_.empty())
+					{
+						if (!done)
+						{
+							llmSentenceBuffer_ += delta;
+							size_t splitPos = std::string::npos;
+							for (auto ch : {'\n'})
+							{
+								size_t p = llmSentenceBuffer_.rfind(ch);
+								if (p != std::string::npos && p < llmSentenceBuffer_.size() - 1)
+									splitPos = p;
+							}
+							const char* delimiters[] = {"。", "！", "？", "!", "?"};
+							for (auto* d : delimiters)
+							{
+								size_t p = llmSentenceBuffer_.rfind(d);
+								if (p != std::string::npos)
+								{
+									size_t dlen = strlen(d);
+									if (p + dlen < llmSentenceBuffer_.size() || splitPos == std::string::npos)
+										if (splitPos == std::string::npos || p + dlen > splitPos)
+											splitPos = p + dlen;
+								}
+							}
+							if (splitPos != std::string::npos && splitPos > 0 && splitPos <= llmSentenceBuffer_.size())
+							{
+								std::string sentence = llmSentenceBuffer_.substr(0, splitPos);
+								llmSentenceBuffer_ = llmSentenceBuffer_.substr(splitPos);
+								while (!llmSentenceBuffer_.empty() && (llmSentenceBuffer_[0] == '\n' || llmSentenceBuffer_[0] == ' '))
+									llmSentenceBuffer_.erase(0, 1);
+								if (!sentence.empty())
+								{
+									{
+										std::lock_guard<std::mutex> lock(llmSpeechQueueMutex_);
+										llmSpeechQueue_.push_back(std::move(sentence));
+									}
+									llmSpeechQueueCV_.notify_one();
+								}
+							}
+						}
+						else
+						{
+							if (!llmSentenceBuffer_.empty())
+							{
+								{
+									std::lock_guard<std::mutex> lock(llmSpeechQueueMutex_);
+									llmSpeechQueue_.push_back(std::move(llmSentenceBuffer_));
+								}
+								llmSpeechQueueCV_.notify_one();
+								llmSentenceBuffer_.clear();
+							}
+						}
+					}
+				});
+			}
+		}
+	}
+
 	// User input area
 	bool enterPressed = false;
 	if (llmUseWhisper_ && !transcribedText_.empty())
@@ -1141,14 +1379,14 @@ void MediaCaptureDemoSystem::DrawLLMPanel()
 		llmClient_->SetSystemPrompt(llmSystemPrompt_);
 
 		// 画像を収集
-		std::vector<std::pair<const uint8_t *, std::pair<uint32_t, uint32_t>>> images;
+		std::vector<LLMClient::ImageFrame> frames;
 
 		if (llmAttachWebCam_ && webCamera_ && webCamera_->IsCapturing())
 		{
 			uint32_t fw = 0, fh = 0;
 			if (webCamera_->GetLatestFrame(camFrameBuffer_, fw, fh) && fw > 0 && fh > 0)
 			{
-				images.push_back({camFrameBuffer_.data(), {fw, fh}});
+				frames.push_back({camFrameBuffer_.data(), fw, fh});
 			}
 		}
 		if (llmAttachScreen_ && screenCapture_ && screenCapture_->IsCapturing())
@@ -1156,34 +1394,94 @@ void MediaCaptureDemoSystem::DrawLLMPanel()
 			uint32_t fw = 0, fh = 0;
 			if (screenCapture_->GetLatestFrame(screenFrameBuffer_, fw, fh) && fw > 0 && fh > 0)
 			{
-				images.push_back({screenFrameBuffer_.data(), {fw, fh}});
+				frames.push_back({screenFrameBuffer_.data(), fw, fh});
 			}
 		}
 
-		if (images.empty())
+		if (frames.empty())
 		{
 			llmClient_->AddMessage("user", llmUserInput_);
 		}
 		else
 		{
-			auto &first = images[0];
-			llmClient_->AddMessageWithImage("user", llmUserInput_, first.first, first.second.first, first.second.second);
-			for (size_t i = 1; i < images.size(); ++i)
-			{
-				auto &img = images[i];
-				llmClient_->AddMessageWithImage("user", "", img.first, img.second.first, img.second.second);
-			}
+			llmClient_->AddMessageWithImages("user", llmUserInput_, frames);
 		}
 
 		isLLMProcessing_ = true;
 		llmStreamingText_.clear();
+		llmSentenceBuffer_.clear();
+		llmSynthWorkerRunning_.store(false);
+		llmSpeechQueueCV_.notify_one();
+		if (llmSynthWorker_.joinable()) llmSynthWorker_.join();
+		{
+			std::lock_guard<std::mutex> lock(llmSpeechQueueMutex_);
+			llmSpeechQueue_.clear();
+		}
+		{
+			std::lock_guard<std::mutex> lock(llmSynthesizedMutex_);
+			llmSynthesizedQueue_.clear();
+		}
 
 		llmFuture_ = llmClient_->SendStreamAsync([this](const std::string &delta, bool done)
-												  {
+		{
 			if (!done) {
 				std::lock_guard<std::mutex> lock(llmStreamMutex_);
 				llmStreamingText_ += delta;
-			} });
+			}
+			if (llmSpeakResponse_ && voiceVox_ && voiceVox_->IsEngineReady() && !voiceVoxSpeakers_.empty())
+			{
+				if (!done)
+				{
+					llmSentenceBuffer_ += delta;
+					size_t splitPos = std::string::npos;
+					for (auto ch : {'\n'})
+					{
+						size_t p = llmSentenceBuffer_.rfind(ch);
+						if (p != std::string::npos && p < llmSentenceBuffer_.size() - 1)
+							splitPos = p;
+					}
+					const char* delimiters[] = {"。", "！", "？", "!", "?"};
+					for (auto* d : delimiters)
+					{
+						size_t p = llmSentenceBuffer_.rfind(d);
+						if (p != std::string::npos)
+						{
+							size_t dlen = strlen(d);
+							if (p + dlen < llmSentenceBuffer_.size() || splitPos == std::string::npos)
+								if (splitPos == std::string::npos || p + dlen > splitPos)
+									splitPos = p + dlen;
+						}
+					}
+					if (splitPos != std::string::npos && splitPos > 0 && splitPos <= llmSentenceBuffer_.size())
+					{
+						std::string sentence = llmSentenceBuffer_.substr(0, splitPos);
+						llmSentenceBuffer_ = llmSentenceBuffer_.substr(splitPos);
+						while (!llmSentenceBuffer_.empty() && (llmSentenceBuffer_[0] == '\n' || llmSentenceBuffer_[0] == ' '))
+							llmSentenceBuffer_.erase(0, 1);
+						if (!sentence.empty())
+						{
+							{
+								std::lock_guard<std::mutex> lock(llmSpeechQueueMutex_);
+								llmSpeechQueue_.push_back(std::move(sentence));
+							}
+							llmSpeechQueueCV_.notify_one();
+						}
+					}
+				}
+				else
+				{
+					if (!llmSentenceBuffer_.empty())
+					{
+						{
+							std::lock_guard<std::mutex> lock(llmSpeechQueueMutex_);
+							llmSpeechQueue_.push_back(std::move(llmSentenceBuffer_));
+						}
+						llmSpeechQueueCV_.notify_one();
+						llmSentenceBuffer_.clear();
+					}
+				}
+			}
+		});
 
 		llmUserInput_.clear();
 	}

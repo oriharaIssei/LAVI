@@ -197,6 +197,22 @@ void LLMClient::AddMessageWithImage(const std::string& role, const std::string& 
     history_.push_back(std::move(msg));
 }
 
+void LLMClient::AddMessageWithImages(const std::string& role, const std::string& text,
+                                      const std::vector<ImageFrame>& frames) {
+    LLMMessage msg;
+    msg.role = role;
+    msg.content = text;
+    for (auto& frame : frames) {
+        std::string base64 = EncodeToBase64Jpeg(frame.data, frame.width, frame.height);
+        if (base64.empty()) continue;
+        LLMMessage::ImageContent img;
+        img.base64Data = std::move(base64);
+        msg.images.push_back(std::move(img));
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    history_.push_back(std::move(msg));
+}
+
 void LLMClient::ClearHistory() {
     std::lock_guard<std::mutex> lock(mutex_);
     history_.clear();

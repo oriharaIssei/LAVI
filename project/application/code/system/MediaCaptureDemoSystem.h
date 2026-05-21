@@ -8,6 +8,9 @@
 #include "directX12/DxDescriptor.h"
 
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <deque>
 #include <future>
 #include <memory>
 #include <mutex>
@@ -131,4 +134,22 @@ private:
     bool llmAttachWebCam_ = false;
     bool llmAttachScreen_ = false;
     std::mutex llmStreamMutex_;
+
+    // LLM → VoiceVox
+    bool llmSpeakResponse_ = false;
+    std::string llmSentenceBuffer_;
+    std::deque<std::string> llmSpeechQueue_;
+    std::mutex llmSpeechQueueMutex_;
+    std::condition_variable llmSpeechQueueCV_;
+    std::deque<std::vector<uint8_t>> llmSynthesizedQueue_;
+    std::mutex llmSynthesizedMutex_;
+    std::thread llmSynthWorker_;
+    std::atomic<bool> llmSynthWorkerRunning_{false};
+
+    // 自律観察モード
+    bool llmAutoObserve_ = false;
+    bool llmAutoObserveWebCam_ = true;
+    bool llmAutoObserveScreen_ = false;
+    float llmAutoObserveInterval_ = 10.0f;
+    std::chrono::steady_clock::time_point llmAutoObserveLastTime_;
 };
