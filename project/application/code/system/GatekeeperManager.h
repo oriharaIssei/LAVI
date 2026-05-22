@@ -8,6 +8,9 @@
 #include "CameraGatekeeper.h"
 #include "ScreenGatekeeper.h"
 #include "MicGatekeeper.h"
+#include "LLMClient.h"
+
+#include <future>
 
 struct SharedMediaContext;
 
@@ -51,6 +54,10 @@ public:
         float micInterval = 0.2f;
 
         float combineWindow = 1.5f;   // この時間内のトリガーを 1 件に合成
+
+        bool autoEscalate = false;     // 判断を自動で Claude へ送出するか
+        float escalateCooldown = 8.0f; // 自動送出の最小間隔 (秒)
+        bool autoSpeak = true;         // 応答を VoiceVox で発話するか
     };
 
     GatekeeperManager();
@@ -76,6 +83,11 @@ public:
 
     void ClearLog();
 
+    // 直近の判断を手動で Claude へ送出する
+    void EscalateLatest();
+    bool LlmBusy() const { return llmBusy_; }
+    const std::string& LastResponse() const { return lastResponse_; }
+
     static const char* SourceName(GateSource s);
     static const char* TargetName(RouteTarget t);
 
@@ -85,6 +97,10 @@ private:
     void FlushPending(double now);
     static RouteTarget Classify(const std::vector<GateEvent>& evs);
     static std::string BuildPrompt(const std::vector<GateEvent>& evs, RouteTarget t);
+
+    void Dispatch(const RouteDecision& dec, double now);
+    void PollLlm();
+    void Speak(const std::string& text);
 
     SharedMediaContext* ctx_ = nullptr;
 
@@ -107,4 +123,11 @@ private:
 
     uint32_t lastCamW_ = 0, lastCamH_ = 0;
     uint32_t lastScreenW_ = 0, lastScreenH_ = 0;
+
+    // Claude 送出 (エスカレーション)
+    LLMClient llm_;
+    std::future<LLMResponse> llmFuture_;
+    bool llmBusy_ = false;
+    std::string lastResponse_;
+    double lastEscalate_ = -1.0e9;
 };

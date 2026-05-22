@@ -1,5 +1,6 @@
 #include "GatekeeperManager.h"
 #include "SharedMediaContext.h"
+#include "EmotionTag.h"
 
 #define ENGINE_INCLUDE
 #define ENGINE_MEDIA_CAPTURE
@@ -14,6 +15,24 @@ std::string Join(const std::vector<std::string>& v, const char* sep) {
     for (size_t i = 0; i < v.size(); ++i) {
         if (i) out += sep;
         out += v[i];
+    }
+    return out;
+}
+
+// 発話用にタグ類 ([joy] [thinking] 等の角括弧表記) を除去する。
+// 表示テキストはそのまま、音声に渡すテキストだけクリーンにするために使う。
+std::string SanitizeForSpeech(const std::string& in) {
+    std::string out;
+    out.reserve(in.size());
+    for (size_t i = 0; i < in.size();) {
+        if (in[i] == '[') {
+            const size_t close = in.find(']', i);
+            if (close != std::string::npos && close - i <= 24) {  // 短い角括弧 = タグ扱い
+                i = close + 1;
+                continue;
+            }
+        }
+        out += in[i++];
     }
     return out;
 }
@@ -47,6 +66,8 @@ void GatekeeperManager::PushEvent(GateSource src, std::string desc, double now) 
 void GatekeeperManager::Update() {
     if (!ctx_) return;
     const double now = NowSec();
+
+    PollLlm();  // 進行中の Claude 応答を回収・発話
 
     // --- カメラ (表情変化) ---
     if (config_.camEnabled && camera_->IsReady() && now - lastCam_ >= config_.camInterval) {
@@ -134,6 +155,60 @@ void GatekeeperManager::FlushPending(double now) {
     if (decisions_.size() > 20) decisions_.erase(decisions_.begin());
 
     pending_.clear();
+
+    // 自動エスカレーション
+    if (config_.autoEscalate && !llmBusy_ && (now - lastEscalate_ >= config_.escalateCooldown)) {
+        Dispatch(decisions_.back(), now);
+    }
+}
+
+void GatekeeperManager::Dispatch(const RouteDecision& dec, double now) {
+    if (!ctx_ || ctx_->config.apiKey.empty() || llmBusy_) return;
+
+    llm_.SetApiKey(ctx_->config.apiKey);
+    if (!ctx_->config.llmSystemPrompt.empty()) {
+        llm_.SetSystemPrompt(ctx_->config.llmSystemPrompt);
+    }
+    llm_.ClearHistory();
+    llm_.AddMessage("user", dec.prompt);
+
+    llmFuture_ = llm_.SendAsync();
+    llmBusy_ = true;
+    lastEscalate_ = now;
+}
+
+void GatekeeperManager::PollLlm() {
+    if (!llmBusy_ || !llmFuture_.valid()) return;
+    if (llmFuture_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+
+    LLMResponse resp = llmFuture_.get();
+    llmBusy_ = false;
+    lastResponse_ = resp.success ? resp.content : ("[Error] " + resp.error);
+    if (resp.success && config_.autoSpeak) {
+        Speak(resp.content);
+    }
+}
+
+void GatekeeperManager::Speak(const std::string& text) {
+    if (!ctx_ || !ctx_->voiceVox || !ctx_->voiceVox->IsEngineReady()) return;
+    if (ctx_->voiceVoxSpeakers.empty() || ctx_->isSpeaking) return;
+
+    // 読み上げは "..." で囲まれた部分のみ。クオートが無ければ旧来のタグ除去でフォールバック。
+    std::string spoken = ExtractSpokenText(text);
+    if (spoken.empty()) spoken = SanitizeForSpeech(text);
+    if (spoken.empty()) return;
+
+    int idx = ctx_->selectedSpeaker;
+    if (idx < 0 || idx >= static_cast<int>(ctx_->voiceVoxSpeakers.size())) idx = 0;
+    const int speakerId = ctx_->voiceVoxSpeakers[idx].id;
+
+    ctx_->speakFuture = ctx_->voiceVox->SpeakAsync(spoken, speakerId);
+    ctx_->isSpeaking = true;
+}
+
+void GatekeeperManager::EscalateLatest() {
+    if (decisions_.empty() || llmBusy_) return;
+    Dispatch(decisions_.back(), NowSec());
 }
 
 RouteTarget GatekeeperManager::Classify(const std::vector<GateEvent>& evs) {

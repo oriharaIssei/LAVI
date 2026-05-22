@@ -114,6 +114,7 @@ void SpeechSynthesisPipeline::FeedDelta(const std::string& delta) {
             sentence = sentence.substr(tagEnd);
         }
 
+        sentence = StripSpeechQuotes(sentence);  // 読み上げ用にクオート文字を除去
         if (!sentence.empty()) {
             {
                 std::lock_guard<std::mutex> lock(speechQueueMutex_);
@@ -132,6 +133,7 @@ void SpeechSynthesisPipeline::FeedDone() {
             currentEmotion_ = tag;
             sentenceBuffer_ = sentenceBuffer_.substr(tagEnd);
         }
+        sentenceBuffer_ = StripSpeechQuotes(sentenceBuffer_);  // 読み上げ用にクオート文字を除去
         if (!sentenceBuffer_.empty()) {
             {
                 std::lock_guard<std::mutex> lock(speechQueueMutex_);

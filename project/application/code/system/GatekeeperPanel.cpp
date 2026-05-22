@@ -88,7 +88,30 @@ void GatekeeperPanel::Draw() {
             ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "(load camera model below)");
         }
         ImGui::SliderFloat("combine window (sec)", &cfg.combineWindow, 0.2f, 5.0f);
+
+        ImGui::Separator();
+        ImGui::Checkbox("Auto escalate (Claude)", &cfg.autoEscalate);
+        ImGui::SameLine();
+        ImGui::Checkbox("Auto speak (VoiceVox)", &cfg.autoSpeak);
+        ImGui::SliderFloat("escalate cooldown (sec)", &cfg.escalateCooldown, 2.0f, 30.0f);
+
+        if (ImGui::Button("Escalate latest now")) mgr_->EscalateLatest();
+        ImGui::SameLine();
+        ImGui::TextColored(mgr_->LlmBusy() ? ImVec4(1, 1, 0, 1) : ImVec4(0.6f, 0.6f, 0.6f, 1),
+                           "%s", mgr_->LlmBusy() ? "Claude: thinking..." : "Claude: idle");
+        ImGui::SameLine();
         if (ImGui::Button("Clear Log")) mgr_->ClearLog();
+
+        if (ctx_->config.apiKey.empty()) {
+            ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "Set API key (LLM/Vision tab) to escalate");
+        }
+        if (cfg.autoSpeak && (!ctx_->voiceVox || !ctx_->voiceVox->IsEngineReady())) {
+            ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "Start VoiceVox engine to speak");
+        }
+        if (!mgr_->LastResponse().empty()) {
+            ImGui::TextUnformatted("Last response:");
+            ImGui::TextWrapped("%s", mgr_->LastResponse().c_str());
+        }
     }
 
     // ===== Camera GK =====
