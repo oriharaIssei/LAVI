@@ -186,6 +186,16 @@ void MicrophonePanel::Draw() {
             transcriber_->ClearAudio();
         }
 
+        ImGui::SameLine();
+        if (ImGui::Button("Voice Snapshot")) {
+            auto snapshot = transcriber_->GetAudioSnapshot();
+            if (!snapshot.empty()) {
+                ctx_->voiceSnapshotBuffer = std::move(snapshot);
+                ctx_->voiceSnapshotSampleRate = 16000;
+                ctx_->voiceSnapshotReady = true;
+            }
+        }
+
         if (isTranscribing_) {
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(1, 1, 0, 1), "Transcribing...");

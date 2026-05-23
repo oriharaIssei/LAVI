@@ -40,6 +40,7 @@ public:
     void SetModel(const std::string& model);
     void SetSystemPrompt(const std::string& prompt);
     void SetMaxTokens(int maxTokens);
+    void SetEnableWebSearch(bool enable, int maxUses = 3);
 
     void AddMessage(const std::string& role, const std::string& content);
     void AddMessageWithImage(const std::string& role, const std::string& text,
@@ -77,6 +78,8 @@ private:
     std::string model_ = "claude-haiku-4-5-20251001";
     std::string systemPrompt_;
     int maxTokens_ = 4096;
+    bool enableWebSearch_ = false;
+    int webSearchMaxUses_ = 3;
     std::vector<LLMMessage> history_;
 
     std::atomic<bool> isProcessing_{false};

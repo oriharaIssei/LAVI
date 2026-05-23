@@ -2,6 +2,8 @@
 #include "SharedMediaContext.h"
 #include "AppConfig.h"
 #include "EmotionTag.h"
+#include "MemoryPanel.h"
+#include "ConversationMemory.h"
 
 #define ENGINE_INCLUDE
 #define ENGINE_MEDIA_CAPTURE
@@ -14,6 +16,10 @@ void LLMChatPanel::Initialize(SharedMediaContext* ctx) {
     ctx_ = ctx;
     llmClient_ = std::make_unique<LLMClient>();
     llmAutoObserveLastTime_ = std::chrono::steady_clock::now();
+}
+
+void LLMChatPanel::SetMemoryPanel(MemoryPanel* memPanel) {
+    memoryPanel_ = memPanel;
 }
 
 void LLMChatPanel::Finalize() {
@@ -110,6 +116,14 @@ void LLMChatPanel::SendLLMRequest(const std::string& text, const std::vector<LLM
     llmClient_->SetApiKey(ctx_->config.apiKey);
 
     std::string systemPrompt = ctx_->config.llmSystemPrompt;
+
+    if (useMemoryContext_ && memoryPanel_) {
+        std::string memCtx = memoryPanel_->BuildMemoryContext();
+        if (!memCtx.empty()) {
+            systemPrompt += "\n\n" + memCtx;
+        }
+    }
+
     if (llmAttachAppInfo_) {
         auto apps = OriGine::ProcessManager::EnumerateWindows();
         std::string appText = OriGine::ProcessManager::FormatAsText(apps);
@@ -118,6 +132,11 @@ void LLMChatPanel::SendLLMRequest(const std::string& text, const std::vector<LLM
         }
     }
     llmClient_->SetSystemPrompt(systemPrompt);
+
+    if (memoryPanel_) {
+        memoryPanel_->GetConversationMemory()->PushMessage("user", text, !frames.empty());
+        memoryPanel_->NotifyUserMessage(text);
+    }
 
     std::string userText = text;
     if (!frames.empty() && !llmAttachAppInfo_) {
@@ -237,6 +256,8 @@ void LLMChatPanel::Draw() {
     ImGui::SameLine();
     ImGui::Checkbox("Apps##llm", &llmAttachAppInfo_);
 
+    ImGui::Checkbox("Memory##llm", &useMemoryContext_);
+    ImGui::SameLine();
     ImGui::Checkbox("VoiceVox Output##llm", &llmSpeakResponse_);
     if (llmSpeakResponse_) {
         ImGui::SameLine();
@@ -324,6 +345,8 @@ void LLMChatPanel::Draw() {
         lastLLMResponse_ = llmFuture_.get();
         if (!lastLLMResponse_.success && !lastLLMResponse_.error.empty()) {
             llmClient_->AddMessage("assistant", "[Error] " + lastLLMResponse_.error);
+        } else if (lastLLMResponse_.success && memoryPanel_) {
+            memoryPanel_->GetConversationMemory()->PushMessage("assistant", lastLLMResponse_.content);
         }
         isLLMProcessing_ = false;
         llmStreamingText_.clear();

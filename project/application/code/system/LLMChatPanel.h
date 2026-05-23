@@ -10,10 +10,12 @@
 #include "SpeechSynthesisPipeline.h"
 
 struct SharedMediaContext;
+class MemoryPanel;
 
 class LLMChatPanel {
 public:
     void Initialize(SharedMediaContext* ctx);
+    void SetMemoryPanel(MemoryPanel* memPanel);
     void Finalize();
     void Draw();
 
@@ -52,4 +54,7 @@ private:
     std::future<LLMResponse> personaFuture_;
     bool isGeneratingPersona_ = false;
     void GeneratePersonaPrompt();
+
+    MemoryPanel* memoryPanel_ = nullptr;
+    bool useMemoryContext_ = true;
 };

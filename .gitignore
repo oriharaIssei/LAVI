@@ -22,6 +22,9 @@
 # whisper.cpp ビルド成果物 (各自 build_whisper_cuda.bat でビルド)
 /project/application/externals/whisper.cpp/build_cuda*/
 
+# llama.cpp ビルド成果物 (各自 build_llama_cuda.bat でビルド)
+/project/application/externals/llama.cpp/build_cuda*/
+
 # ONNX Runtime プレビルド (各自 setup_onnxruntime.bat で配置)
 /project/application/externals/onnxruntime/
 
@@ -31,6 +34,9 @@
 
 # ゲートキーパー用モデル (各自 setup_gatekeeper_models.bat で配置)
 /project/application/resource/gatekeeper/
+
+# LLM モデル (GGUF等、各自ダウンロード)
+/project/application/resource/llm/
 
 # API設定 (APIキーを含むため)
 /project/application/resource/api_config.json

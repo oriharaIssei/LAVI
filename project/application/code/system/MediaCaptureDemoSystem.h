@@ -13,6 +13,7 @@ class VisionPanel;
 class LLMChatPanel;
 class GatekeeperManager;
 class GatekeeperPanel;
+class MemoryPanel;
 
 class MediaCaptureDemoSystem
     : public OriGine::ISystem
@@ -37,4 +38,5 @@ private:
     std::unique_ptr<LLMChatPanel> llmPanel_;
     std::unique_ptr<GatekeeperManager> gkManager_;
     std::unique_ptr<GatekeeperPanel> gkPanel_;
+    std::unique_ptr<MemoryPanel> memoryPanel_;
 };

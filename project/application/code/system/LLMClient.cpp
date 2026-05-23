@@ -210,6 +210,12 @@ void LLMClient::SetMaxTokens(int maxTokens) {
     maxTokens_ = maxTokens;
 }
 
+void LLMClient::SetEnableWebSearch(bool enable, int maxUses) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    enableWebSearch_ = enable;
+    webSearchMaxUses_ = maxUses;
+}
+
 void LLMClient::AddMessage(const std::string& role, const std::string& content) {
     std::lock_guard<std::mutex> lock(mutex_);
     LLMMessage msg;
@@ -308,6 +314,11 @@ std::string LLMClient::BuildRequestBody(bool stream) const {
     if (!systemPrompt_.empty()) {
         body << R"("system":[{"type":"text","text":")" << EscapeJson(systemPrompt_)
              << R"(","cache_control":{"type":"ephemeral"}}],)";
+    }
+
+    if (enableWebSearch_) {
+        body << R"("tools":[{"type":"web_search_20250305","name":"web_search","max_uses":)"
+             << webSearchMaxUses_ << "}],";
     }
 
     body << R"("messages":[)";
@@ -441,11 +452,20 @@ LLMResponse LLMClient::SendRequest() {
         return result;
     }
 
+    bool webSearch;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        webSearch = enableWebSearch_;
+    }
+
     std::string response;
     struct curl_slist* headers = nullptr;
     headers = curl_slist_append(headers, "Content-Type: application/json");
     headers = curl_slist_append(headers, ("x-api-key: " + apiKey).c_str());
     headers = curl_slist_append(headers, "anthropic-version: 2023-06-01");
+    if (webSearch) {
+        headers = curl_slist_append(headers, "anthropic-beta: web-search-2025-03-05");
+    }
 
     curl_easy_setopt(curl, CURLOPT_URL, "https://api.anthropic.com/v1/messages");
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
@@ -496,6 +516,12 @@ LLMResponse LLMClient::SendStreamRequest(LLMStreamCallback callback) {
         return result;
     }
 
+    bool webSearch;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        webSearch = enableWebSearch_;
+    }
+
     StreamContext streamCtx;
     streamCtx.callback = callback;
     streamCtx.cancelFlag = &cancelRequested_;
@@ -504,6 +530,9 @@ LLMResponse LLMClient::SendStreamRequest(LLMStreamCallback callback) {
     headers = curl_slist_append(headers, "Content-Type: application/json");
     headers = curl_slist_append(headers, ("x-api-key: " + apiKey).c_str());
     headers = curl_slist_append(headers, "anthropic-version: 2023-06-01");
+    if (webSearch) {
+        headers = curl_slist_append(headers, "anthropic-beta: web-search-2025-03-05");
+    }
 
     curl_easy_setopt(curl, CURLOPT_URL, "https://api.anthropic.com/v1/messages");
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);

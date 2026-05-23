@@ -52,6 +52,7 @@ public:
     void ClearAudio();
 
     size_t GetAudioSampleCount() const;
+    std::vector<float> GetAudioSnapshot() const;
 
 private:
     void Resample(const float* src, uint32_t srcFrames, uint32_t srcRate, std::vector<float>& dst);
