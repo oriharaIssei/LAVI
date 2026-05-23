@@ -32,6 +32,9 @@
 # ゲートキーパー用モデル (各自 setup_gatekeeper_models.bat で配置)
 /project/application/resource/gatekeeper/
 
+# LLM モデル (GGUF等、各自ダウンロード)
+/project/application/resource/llm/
+
 # API設定 (APIキーを含むため)
 /project/application/resource/api_config.json
 /project/application/resource/GlobalVariables/Settings/ApiConfig.json

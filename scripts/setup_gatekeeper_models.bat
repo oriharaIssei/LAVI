@@ -13,7 +13,7 @@ rem 前提: 先に build_opencv.bat を実行して Haar XML が
 rem       externals\opencv\haarcascades\ にあること。
 rem ==========================================================================
 
-set "ROOT=%~dp0"
+set "ROOT=%~dp0..\"
 set "RESDIR=%ROOT%project\application\resource\gatekeeper"
 set "HAARSRC=%ROOT%project\application\externals\opencv\haarcascades\haarcascade_frontalface_default.xml"
 set "FER_URL=https://github.com/onnx/models/raw/main/validated/vision/body_analysis/emotion_ferplus/model/emotion-ferplus-8.onnx"

@@ -30,6 +30,9 @@ struct EmotionResult {
     Emotion dominant = Emotion::Neutral;
     float confidence = 0.0f;
     bool changed = false;  // 前回採用された支配的感情から変化したか
+
+    // 検出された顔の矩形 (フレーム座標系)
+    int faceX = 0, faceY = 0, faceW = 0, faceH = 0;
 };
 
 // カメラ映像のゲートキーパー。

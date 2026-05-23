@@ -22,7 +22,7 @@ if "%VERSION%"=="" set "VERSION=4.13.0"
 call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvarsall.bat" x64
 set CMAKE_EXE="C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
 
-set "ROOT=%~dp0"
+set "ROOT=%~dp0..\"
 set "EXTROOT=%ROOT%project\application\externals"
 set "SRCZIP=%EXTROOT%\opencv-%VERSION%.zip"
 set "SRCDIR=%EXTROOT%\opencv-%VERSION%"

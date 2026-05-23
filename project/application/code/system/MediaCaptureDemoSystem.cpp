@@ -9,6 +9,7 @@
 #include "LLMChatPanel.h"
 #include "GatekeeperManager.h"
 #include "GatekeeperPanel.h"
+#include "MemoryPanel.h"
 
 #include "imgui/imgui.h"
 
@@ -29,6 +30,7 @@ void MediaCaptureDemoSystem::Initialize() {
     llmPanel_ = std::make_unique<LLMChatPanel>();
     gkManager_ = std::make_unique<GatekeeperManager>();
     gkPanel_ = std::make_unique<GatekeeperPanel>();
+    memoryPanel_ = std::make_unique<MemoryPanel>();
 
     micPanel_->Initialize(ctx_.get());
     camPanel_->Initialize(ctx_.get());
@@ -38,9 +40,12 @@ void MediaCaptureDemoSystem::Initialize() {
     llmPanel_->Initialize(ctx_.get());
     gkManager_->Initialize(ctx_.get());
     gkPanel_->Initialize(ctx_.get(), gkManager_.get());
+    memoryPanel_->Initialize(ctx_.get(), gkManager_.get());
+    llmPanel_->SetMemoryPanel(memoryPanel_.get());
 }
 
 void MediaCaptureDemoSystem::Finalize() {
+    memoryPanel_->Finalize();
     gkPanel_->Finalize();
     llmPanel_->Finalize();
     visionPanel_->Finalize();
@@ -49,6 +54,7 @@ void MediaCaptureDemoSystem::Finalize() {
     camPanel_->Finalize();
     micPanel_->Finalize();
 
+    memoryPanel_.reset();
     gkPanel_.reset();
     gkManager_.reset();
     llmPanel_.reset();
@@ -69,6 +75,7 @@ void MediaCaptureDemoSystem::Update() {
 
     // ゲートキーパーは UI のタブ選択に関係なく毎フレーム評価する
     gkManager_->Update();
+    memoryPanel_->Update();
 
     ImGui::Begin("Media Capture Demo");
 
@@ -99,6 +106,10 @@ void MediaCaptureDemoSystem::Update() {
         }
         if (ImGui::BeginTabItem("Gatekeeper")) {
             gkPanel_->Draw();
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Memory")) {
+            memoryPanel_->Draw();
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();

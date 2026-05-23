@@ -77,6 +77,9 @@ public:
     const ScreenGateResult& ScreenResult() const { return screenResult_; }
     const MicGateResult& MicResult() const { return micResult_; }
 
+    uint32_t CameraFrameWidth() const { return lastCamW_; }
+    uint32_t CameraFrameHeight() const { return lastCamH_; }
+
     Config& config() { return config_; }
     const std::vector<GateEvent>& Events() const { return events_; }
     const std::vector<RouteDecision>& Decisions() const { return decisions_; }

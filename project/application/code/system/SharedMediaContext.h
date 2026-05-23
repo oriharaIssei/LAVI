@@ -29,4 +29,14 @@ struct SharedMediaContext {
     std::future<bool> speakFuture;
 
     std::string transcribedText;
+
+    // 声紋登録用: MicrophonePanel がコピーを書き込む
+    std::vector<float> voiceSnapshotBuffer;
+    uint32_t voiceSnapshotSampleRate = 16000;
+    bool voiceSnapshotReady = false;
+
+    // 顔識別結果 (MemoryPanel が毎フレーム更新)
+    std::string identifiedUserName;
+    float identifiedSimilarity = 0.0f;
+    bool userIdentified = false;
 };

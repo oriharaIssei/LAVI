@@ -32,6 +32,46 @@ defineEngineProjects()
 -- 生成物: application/externals/whisper.cpp/build_cuda/ 以下の .lib
 
 -- ==========================================================================
+-- llama.cpp (CMake で CUDA 付きビルド済み)
+-- ==========================================================================
+-- ビルド手順: build_llama_cuda.bat を実行
+-- 生成物: application/externals/llama.cpp/build_cuda/ 以下の .lib
+
+-- ==========================================================================
+-- SQLite3 (amalgamation)
+-- ==========================================================================
+project "sqlite3"
+    kind "StaticLib"
+    language "C"
+    location "application/externals/sqlite3"
+    targetdir "../generated/output/%{cfg.buildcfg}/"
+    objdir "../generated/obj/%{cfg.buildcfg}/sqlite3/"
+    files { "application/externals/sqlite3/sqlite3.c", "application/externals/sqlite3/sqlite3.h" }
+    defines { "SQLITE_THREADSAFE=1", "SQLITE_OMIT_LOAD_EXTENSION" }
+    warnings "Off"
+    multiprocessorcompile "On"
+    buildoptions { "/utf-8" }
+
+    filter "configurations:Debug"
+        defines { "DEBUG", "_DEBUG" }
+        symbols "On"
+        runtime "Debug"
+        staticruntime "On"
+    filter "configurations:Develop"
+        defines { "DEVELOP" }
+        symbols "On"
+        runtime "Release"
+        staticruntime "On"
+    filter "configurations:Release"
+        defines { "NDEBUG" }
+        optimize "Full"
+        runtime "Release"
+        staticruntime "On"
+    filter "system:windows"
+        systemversion "latest"
+    filter {}
+
+-- ==========================================================================
 -- Application Project
 -- ==========================================================================
 project "LAVI"
@@ -52,21 +92,24 @@ project "LAVI"
             "$(ProjectDir)",
             "$(SolutionDir)application/externals/whisper.cpp/include",
             "$(SolutionDir)application/externals/whisper.cpp/ggml/include",
+            "$(SolutionDir)application/externals/llama.cpp/include",
+            "$(SolutionDir)application/externals/llama.cpp/ggml/include",
             "$(SolutionDir)application/externals/curl/include",
             "$(SolutionDir)application/externals/onnxruntime/include",
             "$(SolutionDir)application/externals/opencv/include",
+            "$(SolutionDir)application/externals/sqlite3",
         },
         getEngineIncludeDirs()
     ))
 
-    dependson { "DirectXTex", "imgui" }
+    dependson { "DirectXTex", "imgui", "sqlite3" }
     libdirs { "$(CUDA_PATH)/lib/x64" }
     libdirs { "application/externals/curl/lib" }
     libdirs { "application/externals/onnxruntime/lib" }
     libdirs { "application/externals/opencv/lib" }
     links(table.join(
-        { "OriGine", "whisper", "ggml", "ggml-base", "ggml-cpu", "ggml-cuda", "cudart_static", "cublas", "cublasLt", "cuda",
-          "libcurl", "xaudio2", "onnxruntime" },
+        { "OriGine", "whisper", "llama", "ggml", "ggml-base", "ggml-cpu", "ggml-cuda", "cudart_static", "cublas", "cublasLt", "cuda",
+          "libcurl", "xaudio2", "onnxruntime", "sqlite3" },
         getEngineLinks()
     ))
 
@@ -78,12 +121,18 @@ project "LAVI"
             "application/externals/whisper.cpp/build_cuda_debug/src",
             "application/externals/whisper.cpp/build_cuda_debug/ggml/src",
             "application/externals/whisper.cpp/build_cuda_debug/ggml/src/ggml-cuda",
+            "application/externals/llama.cpp/build_cuda_debug/src",
+            "application/externals/llama.cpp/build_cuda_debug/ggml/src",
+            "application/externals/llama.cpp/build_cuda_debug/ggml/src/ggml-cuda",
         }
     filter "configurations:Develop or Release"
         libdirs {
             "application/externals/whisper.cpp/build_cuda_release/src",
             "application/externals/whisper.cpp/build_cuda_release/ggml/src",
             "application/externals/whisper.cpp/build_cuda_release/ggml/src/ggml-cuda",
+            "application/externals/llama.cpp/build_cuda_release/src",
+            "application/externals/llama.cpp/build_cuda_release/ggml/src",
+            "application/externals/llama.cpp/build_cuda_release/ggml/src/ggml-cuda",
         }
     filter {}
 

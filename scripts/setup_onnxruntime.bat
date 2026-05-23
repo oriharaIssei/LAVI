@@ -28,7 +28,7 @@ if /I "%VARIANT%"=="gpu" (
 )
 
 set "URL=https://github.com/microsoft/onnxruntime/releases/download/v%VERSION%/%PKG%.zip"
-set "ROOT=%~dp0"
+set "ROOT=%~dp0..\"
 set "EXT=%ROOT%project\application\externals\onnxruntime"
 set "TMPZIP=%TEMP%\%PKG%.zip"
 set "TMPDIR=%TEMP%\onnxruntime_extract"

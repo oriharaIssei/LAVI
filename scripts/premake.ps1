@@ -3,7 +3,7 @@ param(
     [string[]]$RemainingArgs
 )
 
-$rootDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$rootDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 
 # premake5.exe は Engine submodule (project/engine/tools/) から供給される
 $premakeExe = Join-Path $rootDir "project\engine\tools\premake5.exe"

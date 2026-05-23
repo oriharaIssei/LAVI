@@ -82,6 +82,11 @@ EmotionResult CameraGatekeeper::Evaluate(const uint8_t* bgra, uint32_t width, ui
         faces.begin(), faces.end(),
         [](const cv::Rect& a, const cv::Rect& b) { return a.area() < b.area(); });
 
+    result.faceX = face.x;
+    result.faceY = face.y;
+    result.faceW = face.width;
+    result.faceH = face.height;
+
     cv::Mat face64;
     cv::resize(gray(face), face64, cv::Size(kFerSize, kFerSize));
 

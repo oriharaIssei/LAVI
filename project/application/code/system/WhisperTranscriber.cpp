@@ -189,6 +189,11 @@ size_t WhisperTranscriber::GetAudioSampleCount() const {
     return audioBuffer_.size();
 }
 
+std::vector<float> WhisperTranscriber::GetAudioSnapshot() const {
+    std::lock_guard<std::mutex> lock(audioMutex_);
+    return audioBuffer_;
+}
+
 void WhisperTranscriber::MixToMono(const float* src, uint32_t frameCount, uint32_t channels, std::vector<float>& dst) {
     dst.resize(frameCount);
     for (uint32_t i = 0; i < frameCount; ++i) {
