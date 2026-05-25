@@ -70,6 +70,7 @@ private:
     LLMResponse SendStreamRequest(LLMStreamCallback callback);
 
     static std::string EscapeJson(const std::string& input);
+    static std::string ExtractJsonString(const std::string& json, size_t& pos);
     static std::string ParseResponseContent(const std::string& json);
     static std::string ParseErrorMessage(const std::string& json);
     static void ParseUsage(const std::string& json, LLMResponse& result);

@@ -14,6 +14,11 @@ struct OnnxTensor {
     std::vector<int64_t> shape;  // 例: {1, 1, 64, 64}
 };
 
+struct OnnxTensorInt64 {
+    std::vector<int64_t> data;
+    std::vector<int64_t> shape;
+};
+
 class OnnxInferenceEngine {
 public:
     OnnxInferenceEngine();
@@ -33,6 +38,9 @@ public:
 
     // 複数 IO 向け。inputs はモデルの入力順に並べる。
     bool Run(const std::vector<OnnxTensor>& inputs, std::vector<OnnxTensor>& outputs);
+
+    // int64 入力 → float 出力 (Transformerトークン入力向け)
+    bool Run(const std::vector<OnnxTensorInt64>& inputs, std::vector<OnnxTensor>& outputs);
 
     const std::vector<std::string>& InputNames() const;
     const std::vector<std::string>& OutputNames() const;

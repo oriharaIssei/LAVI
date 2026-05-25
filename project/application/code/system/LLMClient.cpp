@@ -591,12 +591,7 @@ std::string LLMClient::EscapeJson(const std::string& input) {
     return output;
 }
 
-std::string LLMClient::ParseResponseContent(const std::string& json) {
-    const std::string key = "\"text\":\"";
-    auto pos = json.find(key);
-    if (pos == std::string::npos) return "";
-
-    pos += key.size();
+std::string LLMClient::ExtractJsonString(const std::string& json, size_t& pos) {
     std::string result;
     while (pos < json.size() && json[pos] != '"') {
         if (json[pos] == '\\' && pos + 1 < json.size()) {
@@ -632,6 +627,39 @@ std::string LLMClient::ParseResponseContent(const std::string& json) {
         }
         ++pos;
     }
+    return result;
+}
+
+std::string LLMClient::ParseResponseContent(const std::string& json) {
+    std::string result;
+    const std::string typeText = "\"type\":\"text\"";
+    const std::string textKey = "\"text\":\"";
+    size_t searchPos = 0;
+
+    while (searchPos < json.size()) {
+        auto typePos = json.find(typeText, searchPos);
+        if (typePos == std::string::npos) break;
+
+        auto textPos = json.find(textKey, typePos + typeText.size());
+        if (textPos == std::string::npos) break;
+
+        size_t valStart = textPos + textKey.size();
+        std::string block = ExtractJsonString(json, valStart);
+        if (!block.empty()) {
+            if (!result.empty()) result += "\n";
+            result += block;
+        }
+        searchPos = valStart;
+    }
+
+    if (result.empty()) {
+        auto pos = json.find(textKey);
+        if (pos != std::string::npos) {
+            pos += textKey.size();
+            result = ExtractJsonString(json, pos);
+        }
+    }
+
     return result;
 }
 

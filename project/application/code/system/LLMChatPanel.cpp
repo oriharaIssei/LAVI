@@ -4,6 +4,9 @@
 #include "EmotionTag.h"
 #include "MemoryPanel.h"
 #include "ConversationMemory.h"
+#include "WebAction.h"
+#include "LongTermMemory.h"
+#include "SentenceEmbedding.h"
 
 #define ENGINE_INCLUDE
 #define ENGINE_MEDIA_CAPTURE
@@ -43,6 +46,9 @@ void LLMChatPanel::Finalize() {
 }
 
 LLMStreamCallback LLMChatPanel::MakeStreamCallback() {
+    speechTagBuf_.clear();
+    inActionTag_ = false;
+
     return [this](const std::string& delta, bool done) {
         if (!done) {
             std::lock_guard<std::mutex> lock(llmStreamMutex_);
@@ -50,10 +56,45 @@ LLMStreamCallback LLMChatPanel::MakeStreamCallback() {
         }
         if (llmSpeakResponse_ && ctx_->voiceVox && ctx_->voiceVox->IsEngineReady()
             && !ctx_->voiceVoxSpeakers.empty()) {
-            if (!done) {
-                synthPipeline_.FeedDelta(delta);
-            } else {
+            if (done) {
+                if (!speechTagBuf_.empty()) {
+                    synthPipeline_.FeedDelta(speechTagBuf_);
+                    speechTagBuf_.clear();
+                }
                 synthPipeline_.FeedDone();
+                return;
+            }
+
+            speechTagBuf_ += delta;
+            static const std::string kTag = "[browser:";
+            while (!speechTagBuf_.empty()) {
+                if (inActionTag_) {
+                    auto end = speechTagBuf_.find(']');
+                    if (end == std::string::npos) break;
+                    speechTagBuf_ = speechTagBuf_.substr(end + 1);
+                    inActionTag_ = false;
+                } else {
+                    auto tagPos = speechTagBuf_.find(kTag);
+                    if (tagPos == std::string::npos) {
+                        size_t safe = speechTagBuf_.size();
+                        for (size_t n = 1; n < kTag.size() && n <= speechTagBuf_.size(); ++n) {
+                            if (speechTagBuf_.compare(speechTagBuf_.size() - n, n, kTag, 0, n) == 0) {
+                                safe = speechTagBuf_.size() - n;
+                                break;
+                            }
+                        }
+                        if (safe > 0) {
+                            synthPipeline_.FeedDelta(speechTagBuf_.substr(0, safe));
+                        }
+                        speechTagBuf_ = speechTagBuf_.substr(safe);
+                        break;
+                    }
+                    if (tagPos > 0) {
+                        synthPipeline_.FeedDelta(speechTagBuf_.substr(0, tagPos));
+                    }
+                    speechTagBuf_ = speechTagBuf_.substr(tagPos);
+                    inActionTag_ = true;
+                }
             }
         }
     };
@@ -112,8 +153,22 @@ void LLMChatPanel::GeneratePersonaPrompt() {
     personaFuture_ = personaClient_->SendAsync();
 }
 
+static bool NeedsSummary(const std::string& text) {
+    static const char* kw[] = {
+        "\xE8\xA6\x81\xE7\xB4\x84", // 要約
+        "\xE3\x81\xBE\xE3\x81\xA8\xE3\x82\x81", // まとめ
+        "\xE8\xAA\xAC\xE6\x98\x8E", // 説明
+        "summary",
+    };
+    for (const auto* w : kw) {
+        if (text.find(w) != std::string::npos) return true;
+    }
+    return false;
+}
+
 void LLMChatPanel::SendLLMRequest(const std::string& text, const std::vector<LLMClient::ImageFrame>& frames, bool playFiller) {
     llmClient_->SetApiKey(ctx_->config.apiKey);
+    llmClient_->SetEnableWebSearch(llmEnableWebSearch_ && NeedsSummary(text));
 
     std::string systemPrompt = ctx_->config.llmSystemPrompt;
 
@@ -122,6 +177,11 @@ void LLMChatPanel::SendLLMRequest(const std::string& text, const std::vector<LLM
         if (!memCtx.empty()) {
             systemPrompt += "\n\n" + memCtx;
         }
+    }
+
+    if (llmEnableWebSearch_ || ContainsActionKeyword(text)) {
+        systemPrompt += "\n\n";
+        systemPrompt += GetWebActionPrompt();
     }
 
     if (llmAttachAppInfo_) {
@@ -258,6 +318,8 @@ void LLMChatPanel::Draw() {
 
     ImGui::Checkbox("Memory##llm", &useMemoryContext_);
     ImGui::SameLine();
+    ImGui::Checkbox("Web##llm", &llmEnableWebSearch_);
+    ImGui::SameLine();
     ImGui::Checkbox("VoiceVox Output##llm", &llmSpeakResponse_);
     if (llmSpeakResponse_) {
         ImGui::SameLine();
@@ -315,7 +377,7 @@ void LLMChatPanel::Draw() {
                 ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "LAVI:");
                 ImGui::SameLine();
             }
-            std::string display = (msg.role == "assistant") ? StripEmotionTag(msg.content) : msg.content;
+            std::string display = (msg.role == "assistant") ? StripWebActions(StripEmotionTag(msg.content)) : msg.content;
             ImGui::TextWrapped("%s", display.c_str());
             ImGui::Spacing();
         }
@@ -326,7 +388,7 @@ void LLMChatPanel::Draw() {
             std::string streamDisplay;
             {
                 std::lock_guard<std::mutex> lock(llmStreamMutex_);
-                streamDisplay = StripEmotionTag(llmStreamingText_);
+                streamDisplay = StripWebActions(StripEmotionTag(llmStreamingText_));
             }
             ImGui::TextWrapped("%s", streamDisplay.empty() ? "..." : streamDisplay.c_str());
         }
@@ -345,8 +407,15 @@ void LLMChatPanel::Draw() {
         lastLLMResponse_ = llmFuture_.get();
         if (!lastLLMResponse_.success && !lastLLMResponse_.error.empty()) {
             llmClient_->AddMessage("assistant", "[Error] " + lastLLMResponse_.error);
-        } else if (lastLLMResponse_.success && memoryPanel_) {
-            memoryPanel_->GetConversationMemory()->PushMessage("assistant", lastLLMResponse_.content);
+        } else if (lastLLMResponse_.success) {
+            auto actions = ParseWebActions(lastLLMResponse_.content);
+            if (!actions.empty()) {
+                LongTermMemory* ltm = memoryPanel_ ? memoryPanel_->GetLongTermMemory() : nullptr;
+                ExecuteWebActions(actions, ltm);
+            }
+            if (memoryPanel_) {
+                memoryPanel_->GetConversationMemory()->PushMessage("assistant", lastLLMResponse_.content);
+            }
         }
         isLLMProcessing_ = false;
         llmStreamingText_.clear();
@@ -432,23 +501,55 @@ void LLMChatPanel::Draw() {
     if (!canSend) ImGui::BeginDisabled();
 
     if (ImGui::Button("Send##llm") || (enterPressed && canSend)) {
-        std::vector<LLMClient::ImageFrame> frames;
-
-        if (llmAttachWebCam_ && ctx_->webCamera && ctx_->webCamera->IsCapturing()) {
-            uint32_t fw = 0, fh = 0;
-            if (ctx_->webCamera->GetLatestFrame(ctx_->camFrameBuffer, fw, fh) && fw > 0 && fh > 0) {
-                frames.push_back({ctx_->camFrameBuffer.data(), fw, fh});
-            }
-        }
-        if (llmAttachScreen_ && ctx_->screenCapture && ctx_->screenCapture->IsCapturing()) {
-            uint32_t fw = 0, fh = 0;
-            if (ctx_->screenCapture->GetLatestFrame(ctx_->screenFrameBuffer, fw, fh) && fw > 0 && fh > 0) {
-                frames.push_back({ctx_->screenFrameBuffer.data(), fw, fh});
-            }
+        // 発話から興味関心を学習
+        if (memoryPanel_) {
+            LearnInterestsFromSpeech(llmUserInput_, memoryPanel_->GetLongTermMemory());
         }
 
-        SendLLMRequest(llmUserInput_, frames, llmPlayFiller_);
-        llmUserInput_.clear();
+        // アクション系キーワードがあればローカル処理を先に試みる (API不要)
+        if (ContainsActionKeyword(llmUserInput_) && memoryPanel_) {
+            LongTermMemory* ltm = memoryPanel_->GetLongTermMemory();
+            auto localResult = TryLocalAction(llmUserInput_, ltm, embedding_);
+            if (localResult.handled) {
+                llmClient_->AddMessage("user", llmUserInput_);
+                llmClient_->AddMessage("assistant", localResult.spokenText);
+                if (memoryPanel_) {
+                    memoryPanel_->GetConversationMemory()->PushMessage("user", llmUserInput_);
+                    memoryPanel_->GetConversationMemory()->PushMessage("assistant", localResult.spokenText);
+                    memoryPanel_->NotifyUserMessage(llmUserInput_);
+                }
+                if (llmSpeakResponse_ && ctx_->voiceVox && ctx_->voiceVox->IsEngineReady()
+                    && !ctx_->voiceVoxSpeakers.empty()) {
+                    int speakerId = ctx_->voiceVoxSpeakers[ctx_->selectedSpeaker].id;
+                    synthPipeline_.StartSession(ctx_->voiceVox, speakerId);
+                    synthPipeline_.FeedDelta(localResult.spokenText);
+                    synthPipeline_.FeedDone();
+                }
+                llmUserInput_.clear();
+                goto done_send;
+            }
+        }
+
+        {
+            std::vector<LLMClient::ImageFrame> frames;
+
+            if (llmAttachWebCam_ && ctx_->webCamera && ctx_->webCamera->IsCapturing()) {
+                uint32_t fw = 0, fh = 0;
+                if (ctx_->webCamera->GetLatestFrame(ctx_->camFrameBuffer, fw, fh) && fw > 0 && fh > 0) {
+                    frames.push_back({ctx_->camFrameBuffer.data(), fw, fh});
+                }
+            }
+            if (llmAttachScreen_ && ctx_->screenCapture && ctx_->screenCapture->IsCapturing()) {
+                uint32_t fw = 0, fh = 0;
+                if (ctx_->screenCapture->GetLatestFrame(ctx_->screenFrameBuffer, fw, fh) && fw > 0 && fh > 0) {
+                    frames.push_back({ctx_->screenFrameBuffer.data(), fw, fh});
+                }
+            }
+
+            SendLLMRequest(llmUserInput_, frames, llmPlayFiller_);
+            llmUserInput_.clear();
+        }
+        done_send:;
     }
 
     if (!canSend) ImGui::EndDisabled();

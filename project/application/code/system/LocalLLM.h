@@ -23,8 +23,10 @@ public:
     void SetMaxTokens(int maxTokens);
 
     std::string Generate(const std::string& prompt);
+    std::string GenerateChat(const std::string& systemPrompt, const std::string& userPrompt);
     std::future<std::string> GenerateAsync(const std::string& prompt);
     std::future<std::string> GenerateAsync(const std::string& prompt, LocalLLMCallback callback);
+    bool HasChatTemplate() const;
 
     bool IsProcessing() const { return isProcessing_.load(); }
     void Cancel();

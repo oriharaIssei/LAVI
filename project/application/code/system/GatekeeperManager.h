@@ -13,6 +13,8 @@
 #include <future>
 
 struct SharedMediaContext;
+class LongTermMemory;
+class SentenceEmbedding;
 
 enum class GateSource { Camera, Screen, Mic };
 
@@ -27,6 +29,7 @@ struct GateEvent {
 enum class RouteTarget {
     None,
     Conversation,  // マイクのキーワード等 → 会話
+    WebSearch,     // 「調べて」等 → Web検索付き会話
     VisionScreen,  // 画面変化 → 画面を見て反応
     VisionCamera,  // 表情変化 → ユーザーを気遣う
     Multi          // 複数ソースの組み合わせ
@@ -67,6 +70,8 @@ public:
     GatekeeperManager& operator=(const GatekeeperManager&) = delete;
 
     void Initialize(SharedMediaContext* ctx);
+    void SetLongTermMemory(LongTermMemory* mem) { longTermMemory_ = mem; }
+    void SetSentenceEmbedding(SentenceEmbedding* emb) { embedding_ = emb; }
     void Update();  // MediaCaptureDemoSystem::Update から毎フレーム呼ぶ
 
     CameraGatekeeper* Camera() { return camera_.get(); }
@@ -98,7 +103,7 @@ private:
     double NowSec() const;
     void PushEvent(GateSource src, std::string desc, double now);
     void FlushPending(double now);
-    static RouteTarget Classify(const std::vector<GateEvent>& evs);
+    RouteTarget Classify(const std::vector<GateEvent>& evs) const;
     static std::string BuildPrompt(const std::vector<GateEvent>& evs, RouteTarget t);
 
     void Dispatch(const RouteDecision& dec, double now);
@@ -133,4 +138,6 @@ private:
     bool llmBusy_ = false;
     std::string lastResponse_;
     double lastEscalate_ = -1.0e9;
+    LongTermMemory* longTermMemory_ = nullptr;
+    SentenceEmbedding* embedding_ = nullptr;
 };

@@ -8,11 +8,19 @@
 
 struct sqlite3;
 
+struct InterestEntry {
+    std::string keyword;
+    int score = 1;
+    std::string lastSeen;
+};
+
 struct UserProfile {
     std::string name;
-    std::vector<std::string> interests;
+    std::unordered_map<std::string, std::vector<InterestEntry>> interests;
     std::vector<std::string> dislikedTopics;
     std::string notes;
+
+    static constexpr int kMaxEntriesPerCategory = 200;
 };
 
 struct AppDailyStat {
@@ -77,6 +85,8 @@ public:
 
     UserProfile& GetUserProfile() { return userProfile_; }
     const UserProfile& GetUserProfile() const { return userProfile_; }
+    void AddInterest(const std::string& category, const std::string& keyword);
+    std::vector<std::string> GetInterests(const std::string& category, int limit = 10) const;
 
     void RecordAppForeground(const std::string& processName, const std::string& windowTitle, float durationMinutes);
     void RecordAppBackground(const std::string& processName, const std::string& windowTitle, float durationMinutes);
@@ -89,6 +99,7 @@ public:
     std::vector<AppTransition> GetAppTransitions(int limit = 0) const;
 
     void RecordWebService(const std::string& serviceName, const std::string& browserProcess, float durationMinutes);
+    void ImportWebServiceFromHistory(const std::string& serviceName, const std::string& browserProcess, int visitCount);
     void SetWebServiceTags(const std::string& serviceName, const std::vector<std::string>& tags);
     WebServiceRecord* FindWebService(const std::string& serviceName);
     const std::vector<WebServiceRecord>& GetWebServiceRecords() const { return webServices_; }
@@ -102,6 +113,7 @@ public:
 
     std::string BuildContextString() const;
     std::string BuildContextString(const std::string& query) const;
+    std::string BuildCompactContext(const std::string& query = "") const;
     std::vector<MemoryFact> SearchFacts(const std::string& query, int maxResults = 10) const;
 
 private:

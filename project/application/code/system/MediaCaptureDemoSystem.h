@@ -14,6 +14,7 @@ class LLMChatPanel;
 class GatekeeperManager;
 class GatekeeperPanel;
 class MemoryPanel;
+class SentenceEmbedding;
 
 class MediaCaptureDemoSystem
     : public OriGine::ISystem
@@ -39,4 +40,5 @@ private:
     std::unique_ptr<GatekeeperManager> gkManager_;
     std::unique_ptr<GatekeeperPanel> gkPanel_;
     std::unique_ptr<MemoryPanel> memoryPanel_;
+    std::unique_ptr<SentenceEmbedding> embedding_;
 };

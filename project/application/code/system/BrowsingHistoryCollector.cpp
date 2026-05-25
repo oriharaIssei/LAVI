@@ -73,7 +73,8 @@ bool IsNoiseTitle(const std::string& title) {
     if (title.empty()) return true;
     if (title.size() < 3) return true;
     static const char* kNoise[] = {
-        "New Tab", "新しいタブ", "Google", "Bing",
+        "New Tab", "\xe6\x96\xb0\xe3\x81\x97\xe3\x81\x84\xe3\x82\xbf\xe3\x83\x96", // 新しいタブ
+        "Google", "Bing",
         "about:blank", "Downloads", "Settings", "Extensions",
     };
     for (auto* n : kNoise) {
@@ -82,10 +83,123 @@ bool IsNoiseTitle(const std::string& title) {
     return false;
 }
 
+// タブタイトルから通知バッジ "(数字)" を除去し、サイト名テンプレート部分を取り除く
+std::string CleanTabTitle(const std::string& title) {
+    std::string s = title;
+
+    // 先頭の "(数字) " を除去 (例: "(3) Xユーザーの..." → "Xユーザーの...")
+    if (s.size() > 2 && s[0] == '(') {
+        size_t close = s.find(')');
+        if (close != std::string::npos && close < 8) {
+            bool allDigits = true;
+            for (size_t i = 1; i < close; ++i) {
+                if (s[i] < '0' || s[i] > '9') { allDigits = false; break; }
+            }
+            if (allDigits) {
+                size_t start = close + 1;
+                while (start < s.size() && s[start] == ' ') ++start;
+                s = s.substr(start);
+            }
+        }
+    }
+
+    // 末尾の " - サービス名" を除去 (例: "動画タイトル - YouTube" → "動画タイトル")
+    static const char* kSuffixes[] = {
+        " - YouTube", " - X", " - Twitter",
+        " - GitHub", " - Qiita", " - Zenn",
+        " - note", " - Reddit", " - Wikipedia",
+        " - Stack Overflow", " - Amazon",
+        " \xc2\xb7 GitHub",  // " · GitHub"
+    };
+    for (auto* suf : kSuffixes) {
+        size_t sufLen = std::strlen(suf);
+        if (s.size() > sufLen && s.compare(s.size() - sufLen, sufLen, suf) == 0) {
+            s = s.substr(0, s.size() - sufLen);
+            break;
+        }
+    }
+
+    // 末尾の空白除去
+    while (!s.empty() && (s.back() == ' ' || s.back() == '\t')) s.pop_back();
+    return s;
+}
+
+// 抽出されたキーワードがノイズかどうか判定
+bool IsNoiseKeyword(const std::string& kw) {
+    if (kw.empty() || kw.size() < 2) return true;
+    // バッククォートのみ
+    if (kw.find_first_not_of("` \t\r\n") == std::string::npos) return true;
+    // 通知バッジの残骸
+    if (kw[0] == '(' && kw.find(')') != std::string::npos && kw.size() < 6) return true;
+    // サービス名そのもの
+    static const char* kServiceNames[] = {
+        "YouTube", "Twitter", "X\xe3\x83\xa6\xe3\x83\xbc\xe3\x82\xb6\xe3\x83\xbc", // Xユーザー
+        "GitHub", "Google", "Amazon", "Reddit", "Wikipedia",
+    };
+    for (auto* sn : kServiceNames) {
+        if (kw == sn) return true;
+    }
+    return false;
+}
+
+// Qwen3 の thinking mode 出力 <think>...</think> を除去
+std::string StripThinkingTags(const std::string& s) {
+    std::string result = s;
+    while (true) {
+        auto start = result.find("<think>");
+        if (start == std::string::npos) break;
+        auto end = result.find("</think>", start);
+        if (end == std::string::npos) {
+            result = result.substr(0, start);
+            break;
+        }
+        result.erase(start, end + 8 - start);
+    }
+    return result;
+}
+
 }  // namespace
 
 BrowsingHistoryCollector::BrowsingHistoryCollector() = default;
 BrowsingHistoryCollector::~BrowsingHistoryCollector() = default;
+
+void BrowsingHistoryCollector::LoadCategories(const std::string& tagAxesPath) {
+    std::ifstream file(tagAxesPath);
+    if (!file.is_open()) return;
+
+    std::string json((std::istreambuf_iterator<char>(file)),
+                      std::istreambuf_iterator<char>());
+
+    categories_.clear();
+
+    // "interest_categories": ["音楽", "ゲーム", ...] を読む
+    auto key = json.find("\"interest_categories\"");
+    if (key == std::string::npos) return;
+
+    auto arrStart = json.find('[', key);
+    if (arrStart == std::string::npos) return;
+
+    auto arrEnd = json.find(']', arrStart);
+    if (arrEnd == std::string::npos) return;
+
+    size_t pos = arrStart + 1;
+    while (pos < arrEnd) {
+        auto qStart = json.find('"', pos);
+        if (qStart == std::string::npos || qStart >= arrEnd) break;
+        auto qEnd = json.find('"', qStart + 1);
+        if (qEnd == std::string::npos || qEnd >= arrEnd) break;
+        categories_.push_back(json.substr(qStart + 1, qEnd - qStart - 1));
+        pos = qEnd + 1;
+    }
+}
+
+bool BrowsingHistoryCollector::IsValidCategory(const std::string& cat) const {
+    if (categories_.empty()) return true;
+    for (auto& c : categories_) {
+        if (c == cat) return true;
+    }
+    return false;
+}
 
 auto BrowsingHistoryCollector::FindBrowserProfiles() const -> std::vector<BrowserProfile> {
     std::vector<BrowserProfile> profiles;
@@ -177,12 +291,39 @@ std::vector<BrowsingEntry> BrowsingHistoryCollector::ReadRecentHistory(
     std::vector<BrowsingEntry> all;
     auto profiles = FindBrowserProfiles();
 
+    lastReport_ = CollectionReport{};
+
     for (auto& p : profiles) {
+        BrowserCollectionInfo info;
+        info.name = p.name;
+        info.found = true;
         auto entries = ReadSqliteHistory(p.historyPath, maxEntries, daysBack);
+        info.entryCount = static_cast<int>(entries.size());
+        lastReport_.browsers.push_back(info);
         for (auto& e : entries) {
+            e.browserName = p.name;
             all.push_back(std::move(e));
         }
     }
+
+    // 検索対象だが見つからなかったブラウザも記録
+    struct BrowserInfo {
+        const char* name;
+    };
+    static const BrowserInfo kAllBrowsers[] = {
+        {"Chrome"}, {"Chrome Beta"}, {"Edge"}, {"Brave"}, {"Vivaldi"},
+    };
+    for (auto& b : kAllBrowsers) {
+        bool alreadyListed = false;
+        for (auto& bi : lastReport_.browsers) {
+            if (bi.name == b.name) { alreadyListed = true; break; }
+        }
+        if (!alreadyListed) {
+            lastReport_.browsers.push_back({b.name, false, 0});
+        }
+    }
+
+    lastReport_.totalEntries = static_cast<int>(all.size());
 
     std::sort(all.begin(), all.end(), [](const BrowsingEntry& a, const BrowsingEntry& b) {
         return a.lastVisit > b.lastVisit;
@@ -190,6 +331,7 @@ std::vector<BrowsingEntry> BrowsingHistoryCollector::ReadRecentHistory(
     if (static_cast<int>(all.size()) > maxEntries) {
         all.resize(maxEntries);
     }
+    lastRawEntries_ = all;
     return all;
 }
 
@@ -200,10 +342,12 @@ std::string BrowsingHistoryCollector::BuildTitleList(
     std::ostringstream ss;
     int count = 0;
     for (auto& e : entries) {
-        if (seen.count(e.title)) continue;
-        seen.insert(e.title);
-        ss << "- " << e.title << "\n";
-        if (++count >= 50) break;
+        std::string cleaned = CleanTabTitle(e.title);
+        if (cleaned.empty() || cleaned.size() < 3) continue;
+        if (seen.count(cleaned)) continue;
+        seen.insert(cleaned);
+        ss << "- " << cleaned << "\n";
+        if (++count >= 20) break;
     }
     return ss.str();
 }
@@ -288,6 +432,42 @@ void BrowsingHistoryCollector::CollectServiceKeywords(
         return;
     }
 
+    lastReport_.servicesFound = static_cast<int>(groups.size());
+    lastReport_.phase = "ServiceKeywords";
+    lastReport_.extractedKeywords.clear();
+    lastReport_.rejectedLines.clear();
+    lastReport_.llmRawOutput.clear();
+    lastReport_.categoriesLoaded = static_cast<int>(categories_.size());
+
+    // ブラウザ名 → プロセス名マッピング
+    auto browserNameToProcess = [](const std::string& name) -> std::string {
+        if (name == "Chrome" || name == "Chrome Beta") return "chrome.exe";
+        if (name == "Edge") return "msedge.exe";
+        if (name == "Brave") return "brave.exe";
+        if (name == "Vivaldi") return "vivaldi.exe";
+        return "";
+    };
+
+    // 各サービスの閲覧データをWebServiceRecordに登録
+    for (auto& [service, serviceEntries] : groups) {
+        // 最も多いブラウザを特定
+        std::unordered_map<std::string, int> browserCounts;
+        int totalVisits = 0;
+        for (auto& e : serviceEntries) {
+            if (!e.browserName.empty()) {
+                browserCounts[e.browserName] += e.visitCount;
+            }
+            totalVisits += e.visitCount;
+        }
+        std::string topBrowser;
+        int topCount = 0;
+        for (auto& [bname, cnt] : browserCounts) {
+            if (cnt > topCount) { topCount = cnt; topBrowser = bname; }
+        }
+        std::string browserProc = browserNameToProcess(topBrowser);
+        memory->ImportWebServiceFromHistory(service, browserProc, totalVisits);
+    }
+
     for (auto& [service, serviceEntries] : groups) {
         if (serviceEntries.size() < 3) continue;
 
@@ -295,58 +475,127 @@ void BrowsingHistoryCollector::CollectServiceKeywords(
         std::ostringstream titleList;
         int count = 0;
         for (auto& e : serviceEntries) {
-            if (seen.count(e.title)) continue;
-            seen.insert(e.title);
-            titleList << "- " << e.title << "\n";
-            if (++count >= 30) break;
+            std::string cleaned = CleanTabTitle(e.title);
+            if (cleaned.empty() || cleaned.size() < 3) continue;
+            if (seen.count(cleaned)) continue;
+            seen.insert(cleaned);
+            titleList << "- " << cleaned << "\n";
+            if (++count >= 15) break;
         }
 
-        std::string prompt =
-            "以下は「" + service + "」でのユーザーの閲覧タイトル一覧です。\n"
-            "この人がこのサービスで何に興味を持っているか、頻出するテーマやキーワードを5〜8個抽出してください。\n"
-            "キーワードのみを改行区切りで出力。余計な説明は不要です。\n\n"
-            + titleList.str();
+        std::string categoryList;
+        for (size_t i = 0; i < categories_.size(); ++i) {
+            if (i > 0) categoryList += ",";
+            categoryList += categories_[i];
+        }
+
+        // system: 抽出ルールと出力形式
+        // user: 実際のタイトル
+        std::string systemPrompt =
+            // タイトル一覧から固有名詞キーワードを抽出するアシスタントです。
+            "\xe3\x82\xbf\xe3\x82\xa4\xe3\x83\x88\xe3\x83\xab\xe4\xb8\x80\xe8\xa6\xa7\xe3\x81\x8b\xe3\x82\x89"
+            "\xe5\x9b\xba\xe6\x9c\x89\xe5\x90\x8d\xe8\xa9\x9e\xe3\x82\xad\xe3\x83\xbc\xe3\x83\xaf\xe3\x83\xbc\xe3\x83\x89"
+            "\xe3\x82\x92\xe6\x8a\xbd\xe5\x87\xba\xe3\x81\x99\xe3\x82\x8b\xe3\x82\xa2\xe3\x82\xb7\xe3\x82\xb9\xe3\x82\xbf\xe3\x83\xb3\xe3\x83\x88\xe3\x81\xa7\xe3\x81\x99\xe3\x80\x82\n"
+            // カテゴリ一覧:
+            "\xe3\x82\xab\xe3\x83\x86\xe3\x82\xb4\xe3\x83\xaa\xe4\xb8\x80\xe8\xa6\xa7: "
+            + categoryList + "\n"
+            // 出力は「カテゴリ:キーワード1,キーワード2」の形式のみ。説明不要。
+            "\xe5\x87\xba\xe5\x8a\x9b\xe3\x81\xaf\xe3\x80\x8c\xe3\x82\xab\xe3\x83\x86\xe3\x82\xb4\xe3\x83\xaa:\xe3\x82\xad\xe3\x83\xbc\xe3\x83\xaf\xe3\x83\xbc\xe3\x83\x89"
+            "1,\xe3\x82\xad\xe3\x83\xbc\xe3\x83\xaf\xe3\x83\xbc\xe3\x83\x89" "2\xe3\x80\x8d"
+            "\xe3\x81\xae\xe5\xbd\xa2\xe5\xbc\x8f\xe3\x81\xae\xe3\x81\xbf\xe3\x80\x82"
+            "\xe8\xaa\xac\xe6\x98\x8e\xe4\xb8\x8d\xe8\xa6\x81\xe3\x80\x82\n"
+            // 例:
+            "\xe4\xbe\x8b:\n"
+            "\xe9\x9f\xb3\xe6\xa5\xbd:YOASOBI,Ado\n"
+            "\xe3\x82\xb2\xe3\x83\xbc\xe3\x83\xa0:APEX,VALORANT\n"
+            "\xe3\x83\x97\xe3\x83\xad\xe3\x82\xb0\xe3\x83\xa9\xe3\x83\x9f\xe3\x83\xb3\xe3\x82\xb0:React,C++\n";
+
+        std::string userPrompt = service + "\xe3\x81\xae\xe3\x82\xbf\xe3\x82\xa4\xe3\x83\x88\xe3\x83\xab:\n"
+            + titleList.str() + "/no_think";
 
         llm->SetMaxTokens(256);
-        std::string result = llm->Generate(prompt);
-        if (result.empty()) continue;
+        std::string rawResult = llm->GenerateChat(systemPrompt, userPrompt);
+        if (rawResult.empty()) {
+            lastReport_.rejectedLines.push_back("[" + service + "] LLM returned empty");
+            continue;
+        }
+        if (!lastReport_.llmRawOutput.empty()) lastReport_.llmRawOutput += "\n---\n";
+        lastReport_.llmRawOutput += "[" + service + "]\n" + rawResult;
 
+        std::string result = StripThinkingTags(rawResult);
+
+        // パース: "カテゴリ:kw1,kw2" 形式
         std::istringstream iss(result);
         std::string line;
-        std::vector<std::string> keywords;
+        std::vector<std::string> allKeywords;
+        int addedCount = 0;
         while (std::getline(iss, line)) {
             size_t start = 0;
             while (start < line.size() && (line[start] == '-' || line[start] == ' ' ||
                    line[start] == '*' || line[start] == '\t')) {
                 ++start;
             }
-            if (start < line.size() && line.size() >= start + 3) {
-                unsigned char c0 = static_cast<unsigned char>(line[start]);
-                unsigned char c1 = static_cast<unsigned char>(line[start + 1]);
-                unsigned char c2 = static_cast<unsigned char>(line[start + 2]);
-                if (c0 == 0xE3 && c1 == 0x83 && c2 == 0xBB) {
-                    start += 3;
+            line = line.substr(start);
+            while (!line.empty() && (line.back() == '\r' || line.back() == '\n' ||
+                   line.back() == ' ')) {
+                line.pop_back();
+            }
+
+            // 全角コロンを半角に正規化
+            {
+                std::string normalized;
+                for (size_t i = 0; i < line.size(); ++i) {
+                    if (i + 2 < line.size() &&
+                        static_cast<unsigned char>(line[i]) == 0xEF &&
+                        static_cast<unsigned char>(line[i+1]) == 0xBC &&
+                        static_cast<unsigned char>(line[i+2]) == 0x9A) {
+                        normalized += ':';
+                        i += 2;
+                    } else {
+                        normalized += line[i];
+                    }
                 }
+                line = normalized;
             }
-            std::string kw = line.substr(start);
-            while (!kw.empty() && (kw.back() == ' ' || kw.back() == '\r' ||
-                   kw.back() == '\n' || kw.back() == '\t')) {
-                kw.pop_back();
+
+            auto colonPos = line.find(':');
+            if (colonPos == std::string::npos) continue;
+
+            std::string category = line.substr(0, colonPos);
+            std::string rest = line.substr(colonPos + 1);
+            if (category.empty() || rest.empty()) continue;
+            if (!IsValidCategory(category)) {
+                lastReport_.rejectedLines.push_back("bad cat: " + category + " -> " + rest);
+                continue;
             }
-            if (!kw.empty() && kw.size() < 50) {
-                keywords.push_back(kw);
+
+            std::istringstream kwStream(rest);
+            std::string kw;
+            while (std::getline(kwStream, kw, ',')) {
+                while (!kw.empty() && kw.front() == ' ') kw.erase(0, 1);
+                while (!kw.empty() && kw.back() == ' ') kw.pop_back();
+                while (!kw.empty() && kw.front() == '#') kw.erase(0, 1);
+                if (!IsNoiseKeyword(kw) && kw.size() < 50 && !kw.empty()) {
+                    memory->AddInterest(category, kw);
+                    allKeywords.push_back(kw);
+                    ++addedCount;
+                }
             }
         }
 
-        if (!keywords.empty()) {
+        if (!allKeywords.empty()) {
             std::ostringstream content;
-            content << service << "での関心: ";
-            for (size_t i = 0; i < keywords.size(); ++i) {
+            content << service << "\xe3\x81\xa7\xe3\x81\xae\xe9\x96\xa2\xe5\xbf\x83: ";
+            for (size_t i = 0; i < allKeywords.size(); ++i) {
                 if (i > 0) content << ", ";
-                content << keywords[i];
+                content << allKeywords[i];
             }
-            memory->AddFact("サービス別関心_" + service, content.str(), 1.2f);
-            ++lastCollectedCount_;
+            memory->AddFact("\xe3\x82\xb5\xe3\x83\xbc\xe3\x83\x93\xe3\x82\xb9\xe5\x88\xa5\xe9\x96\xa2\xe5\xbf\x83_" + service, content.str(), 1.2f);
+            lastCollectedCount_ += addedCount;
+
+            for (auto& kw : allKeywords) {
+                lastReport_.extractedKeywords.push_back(service + ": " + kw);
+            }
         }
     }
 
@@ -375,71 +624,105 @@ void BrowsingHistoryCollector::CollectInterests(LongTermMemory* memory, LocalLLM
         return;
     }
 
-    std::string prompt =
-        "以下はユーザーのブラウザ閲覧履歴のタイトル一覧です。\n"
-        "この人の趣味や興味を5〜10個のキーワードで抽出してください。\n"
-        "キーワードのみを改行区切りで出力してください。説明は不要です。\n\n"
-        + titles;
+    std::string categoryList;
+    for (size_t i = 0; i < categories_.size(); ++i) {
+        if (i > 0) categoryList += ",";
+        categoryList += categories_[i];
+    }
+
+    std::string systemPrompt =
+        "\xe3\x82\xbf\xe3\x82\xa4\xe3\x83\x88\xe3\x83\xab\xe4\xb8\x80\xe8\xa6\xa7\xe3\x81\x8b\xe3\x82\x89"
+        "\xe5\x9b\xba\xe6\x9c\x89\xe5\x90\x8d\xe8\xa9\x9e\xe3\x82\xad\xe3\x83\xbc\xe3\x83\xaf\xe3\x83\xbc\xe3\x83\x89"
+        "\xe3\x82\x92\xe6\x8a\xbd\xe5\x87\xba\xe3\x81\x99\xe3\x82\x8b\xe3\x82\xa2\xe3\x82\xb7\xe3\x82\xb9\xe3\x82\xbf\xe3\x83\xb3\xe3\x83\x88\xe3\x81\xa7\xe3\x81\x99\xe3\x80\x82\n"
+        "\xe3\x82\xab\xe3\x83\x86\xe3\x82\xb4\xe3\x83\xaa\xe4\xb8\x80\xe8\xa6\xa7: "
+        + categoryList + "\n"
+        "\xe5\x87\xba\xe5\x8a\x9b\xe3\x81\xaf\xe3\x80\x8c\xe3\x82\xab\xe3\x83\x86\xe3\x82\xb4\xe3\x83\xaa:\xe3\x82\xad\xe3\x83\xbc\xe3\x83\xaf\xe3\x83\xbc\xe3\x83\x89"
+        "1,\xe3\x82\xad\xe3\x83\xbc\xe3\x83\xaf\xe3\x83\xbc\xe3\x83\x89" "2\xe3\x80\x8d"
+        "\xe3\x81\xae\xe5\xbd\xa2\xe5\xbc\x8f\xe3\x81\xae\xe3\x81\xbf\xe3\x80\x82"
+        "\xe8\xaa\xac\xe6\x98\x8e\xe4\xb8\x8d\xe8\xa6\x81\xe3\x80\x82\n"
+        "\xe4\xbe\x8b:\n"
+        "\xe9\x9f\xb3\xe6\xa5\xbd:YOASOBI,Ado\n"
+        "\xe3\x82\xb2\xe3\x83\xbc\xe3\x83\xa0:APEX,VALORANT\n"
+        "\xe3\x83\x97\xe3\x83\xad\xe3\x82\xb0\xe3\x83\xa9\xe3\x83\x9f\xe3\x83\xb3\xe3\x82\xb0:React,C++\n";
+
+    std::string userPrompt =
+        "\xe3\x82\xbf\xe3\x82\xa4\xe3\x83\x88\xe3\x83\xab:\n" + titles + "/no_think";
 
     llm->SetMaxTokens(256);
-    std::string result = llm->Generate(prompt);
+    std::string rawResult = llm->GenerateChat(systemPrompt, userPrompt);
 
-    if (result.empty()) {
+    if (rawResult.empty()) {
         lastError_ = "LLM returned empty result";
         isCollecting_ = false;
         return;
     }
 
+    lastReport_.phase = "Interests";
+    lastReport_.extractedKeywords.clear();
+    lastReport_.rejectedLines.clear();
+    lastReport_.llmRawOutput = rawResult;
+    lastReport_.categoriesLoaded = static_cast<int>(categories_.size());
+
+    std::string result = StripThinkingTags(rawResult);
+
+    // パース: "カテゴリ:kw1,kw2" 形式
     std::istringstream iss(result);
     std::string line;
-    std::vector<std::string> interests;
+    int addedCount = 0;
     while (std::getline(iss, line)) {
-        // "- " や "・" などの箇条書きプレフィックスを除去
+        // 箇条書きプレフィックスを除去
         size_t start = 0;
         while (start < line.size() && (line[start] == '-' || line[start] == ' ' ||
                line[start] == '*' || line[start] == '\t')) {
             ++start;
         }
-        // UTF-8 の "・" (0xE3 0x83 0xBB)
-        if (start < line.size() && line.size() >= start + 3) {
-            unsigned char c0 = static_cast<unsigned char>(line[start]);
-            unsigned char c1 = static_cast<unsigned char>(line[start + 1]);
-            unsigned char c2 = static_cast<unsigned char>(line[start + 2]);
-            if (c0 == 0xE3 && c1 == 0x83 && c2 == 0xBB) {
-                start += 3;
-            }
+        line = line.substr(start);
+        while (!line.empty() && (line.back() == '\r' || line.back() == '\n' ||
+               line.back() == ' ')) {
+            line.pop_back();
         }
-        std::string keyword = line.substr(start);
-        // 末尾の空白を除去
-        while (!keyword.empty() && (keyword.back() == ' ' || keyword.back() == '\r' ||
-               keyword.back() == '\n' || keyword.back() == '\t')) {
-            keyword.pop_back();
-        }
-        if (!keyword.empty() && keyword.size() < 50) {
-            interests.push_back(keyword);
-        }
-    }
 
-    if (!interests.empty()) {
-        auto& profile = memory->GetUserProfile();
-        for (auto& interest : interests) {
-            bool alreadyExists = false;
-            for (auto& existing : profile.interests) {
-                if (existing == interest) {
-                    alreadyExists = true;
-                    break;
+        // 全角コロンを半角に正規化
+        {
+            std::string normalized;
+            for (size_t i = 0; i < line.size(); ++i) {
+                if (i + 2 < line.size() &&
+                    static_cast<unsigned char>(line[i]) == 0xEF &&
+                    static_cast<unsigned char>(line[i+1]) == 0xBC &&
+                    static_cast<unsigned char>(line[i+2]) == 0x9A) {
+                    normalized += ':';
+                    i += 2;
+                } else {
+                    normalized += line[i];
                 }
             }
-            if (!alreadyExists) {
-                profile.interests.push_back(interest);
-                ++lastCollectedCount_;
-            }
+            line = normalized;
         }
 
-        memory->AddFact("browsing_interests",
-            "Browsing analysis: " + std::to_string(interests.size()) + " interests extracted",
-            0.8f);
+        auto colonPos = line.find(':');
+        if (colonPos == std::string::npos) continue;
+
+        std::string category = line.substr(0, colonPos);
+        std::string rest = line.substr(colonPos + 1);
+        if (category.empty() || rest.empty()) continue;
+        if (!IsValidCategory(category)) {
+            lastReport_.rejectedLines.push_back("bad cat: " + category + " -> " + rest);
+            continue;
+        }
+
+        std::istringstream kwStream(rest);
+        std::string kw;
+        while (std::getline(kwStream, kw, ',')) {
+            while (!kw.empty() && kw.front() == ' ') kw.erase(0, 1);
+            while (!kw.empty() && kw.back() == ' ') kw.pop_back();
+            if (!IsNoiseKeyword(kw) && kw.size() < 50) {
+                memory->AddInterest(category, kw);
+                lastReport_.extractedKeywords.push_back(category + ": " + kw);
+                ++addedCount;
+            }
+        }
     }
 
+    lastCollectedCount_ = addedCount;
     isCollecting_ = false;
 }

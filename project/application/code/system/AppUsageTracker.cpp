@@ -29,7 +29,7 @@ struct ServiceKeyword {
 //   形式: 動画, 音楽, テキスト, 画像, チャット, コード, スライド, ツール
 //   関与: 閲覧, 発信, 作業, 対話
 const ServiceKeyword kServiceKeywords[] = {
-    {"YouTube",        "YouTube",       {"娯楽", "動画", "閲覧"}},
+    {"YouTube",        "YouTube",       {"娯楽", "動画", "音楽", "閲覧"}},
     {"Twitter",        "Twitter/X",     {"交流", "テキスト", "発信"}},
     {" X ",            "Twitter/X",     {"交流", "テキスト", "発信"}},
     {"x.com",          "Twitter/X",     {"交流", "テキスト", "発信"}},

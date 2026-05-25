@@ -148,6 +148,60 @@ bool OnnxInferenceEngine::Run(const std::vector<OnnxTensor>& inputs, std::vector
     }
 }
 
+bool OnnxInferenceEngine::Run(const std::vector<OnnxTensorInt64>& inputs, std::vector<OnnxTensor>& outputs) {
+    if (!impl_->session) {
+        impl_->lastError = "model not loaded";
+        return false;
+    }
+    if (inputs.size() != impl_->inputNames.size()) {
+        impl_->lastError = "input count mismatch";
+        return false;
+    }
+
+    try {
+        Ort::MemoryInfo memInfo =
+            Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+
+        std::vector<std::vector<int64_t>> inputBuffers(inputs.size());
+        std::vector<Ort::Value> inputTensors;
+        inputTensors.reserve(inputs.size());
+
+        for (size_t i = 0; i < inputs.size(); ++i) {
+            inputBuffers[i] = inputs[i].data;
+            inputTensors.push_back(Ort::Value::CreateTensor<int64_t>(
+                memInfo,
+                inputBuffers[i].data(),
+                inputBuffers[i].size(),
+                inputs[i].shape.data(),
+                inputs[i].shape.size()));
+        }
+
+        auto outValues = impl_->session->Run(
+            Ort::RunOptions{nullptr},
+            impl_->inputNamePtrs.data(),
+            inputTensors.data(),
+            inputTensors.size(),
+            impl_->outputNamePtrs.data(),
+            impl_->outputNamePtrs.size());
+
+        outputs.clear();
+        outputs.reserve(outValues.size());
+        for (auto& v : outValues) {
+            auto info = v.GetTensorTypeAndShapeInfo();
+            OnnxTensor t;
+            t.shape = info.GetShape();
+            const size_t count = info.GetElementCount();
+            const float* p = v.GetTensorData<float>();
+            t.data.assign(p, p + count);
+            outputs.push_back(std::move(t));
+        }
+        return true;
+    } catch (const Ort::Exception& e) {
+        impl_->lastError = e.what();
+        return false;
+    }
+}
+
 const std::vector<std::string>& OnnxInferenceEngine::InputNames() const {
     return impl_->inputNames;
 }

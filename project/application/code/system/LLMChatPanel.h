@@ -11,11 +11,13 @@
 
 struct SharedMediaContext;
 class MemoryPanel;
+class SentenceEmbedding;
 
 class LLMChatPanel {
 public:
     void Initialize(SharedMediaContext* ctx);
     void SetMemoryPanel(MemoryPanel* memPanel);
+    void SetSentenceEmbedding(SentenceEmbedding* emb) { embedding_ = emb; }
     void Finalize();
     void Draw();
 
@@ -39,6 +41,10 @@ private:
     SpeechSynthesisPipeline synthPipeline_;
 
     bool llmAttachAppInfo_ = false;
+    bool llmEnableWebSearch_ = false;
+
+    std::string speechTagBuf_;
+    bool inActionTag_ = false;
 
     bool llmAutoObserve_ = false;
     bool llmAutoObserveWebCam_ = true;
@@ -57,4 +63,5 @@ private:
 
     MemoryPanel* memoryPanel_ = nullptr;
     bool useMemoryContext_ = true;
+    SentenceEmbedding* embedding_ = nullptr;
 };

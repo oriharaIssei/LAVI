@@ -319,9 +319,91 @@ bool LongTermMemory::Load() {
         };
 
         userProfile_.name = extractString(profileJson, "name");
-        userProfile_.interests = extractArray(profileJson, "interests");
         userProfile_.dislikedTopics = extractArray(profileJson, "dislikedTopics");
         userProfile_.notes = extractString(profileJson, "notes");
+
+        // interests: {"カテゴリ": [{"k":"...","s":N,"t":"..."}, ...], ...}
+        auto extractEntryInt = [](const std::string& obj, const std::string& key) -> int {
+            std::string search = "\"" + key + "\":";
+            auto p = obj.find(search);
+            if (p == std::string::npos) return 0;
+            p += search.size();
+            return std::atoi(obj.c_str() + p);
+        };
+        auto interestsPos = profileJson.find("\"interests\":{");
+        if (interestsPos != std::string::npos) {
+            auto braceStart = profileJson.find('{', interestsPos + 11);
+            if (braceStart != std::string::npos) {
+                int depth = 1;
+                size_t braceEnd = braceStart + 1;
+                while (braceEnd < profileJson.size() && depth > 0) {
+                    if (profileJson[braceEnd] == '{') ++depth;
+                    else if (profileJson[braceEnd] == '}') --depth;
+                    ++braceEnd;
+                }
+                std::string obj = profileJson.substr(braceStart + 1, braceEnd - braceStart - 2);
+                size_t cur = 0;
+                while (cur < obj.size()) {
+                    // カテゴリ名
+                    auto k1 = obj.find('"', cur);
+                    if (k1 == std::string::npos) break;
+                    auto k2 = obj.find('"', k1 + 1);
+                    if (k2 == std::string::npos) break;
+                    std::string cat = obj.substr(k1 + 1, k2 - k1 - 1);
+                    auto arrStart = obj.find('[', k2);
+                    if (arrStart == std::string::npos) break;
+                    auto arrEnd = obj.find(']', arrStart);
+                    if (arrEnd == std::string::npos) break;
+                    std::string arrStr = obj.substr(arrStart + 1, arrEnd - arrStart - 1);
+
+                    // エントリが {"k":"...","s":N,"t":"..."} 形式かどうか
+                    if (arrStr.find("\"k\"") != std::string::npos) {
+                        size_t ec = 0;
+                        while (ec < arrStr.size()) {
+                            auto eStart = arrStr.find('{', ec);
+                            if (eStart == std::string::npos) break;
+                            auto eEnd = arrStr.find('}', eStart);
+                            if (eEnd == std::string::npos) break;
+                            std::string eObj = arrStr.substr(eStart, eEnd - eStart + 1);
+
+                            InterestEntry entry;
+                            entry.keyword = extractString(eObj, "k");
+                            entry.score = extractEntryInt(eObj, "s");
+                            entry.lastSeen = extractString(eObj, "t");
+                            if (entry.score <= 0) entry.score = 1;
+                            if (!entry.keyword.empty()) {
+                                userProfile_.interests[cat].push_back(std::move(entry));
+                            }
+                            ec = eEnd + 1;
+                        }
+                    } else {
+                        // 簡易形式フォールバック: ["str1","str2"]
+                        size_t ac = 0;
+                        while (ac < arrStr.size()) {
+                            auto q1 = arrStr.find('"', ac);
+                            if (q1 == std::string::npos) break;
+                            auto q2 = arrStr.find('"', q1 + 1);
+                            if (q2 == std::string::npos) break;
+                            InterestEntry entry;
+                            entry.keyword = arrStr.substr(q1 + 1, q2 - q1 - 1);
+                            if (!entry.keyword.empty()) {
+                                userProfile_.interests[cat].push_back(std::move(entry));
+                            }
+                            ac = q2 + 1;
+                        }
+                    }
+                    cur = arrEnd + 1;
+                }
+            }
+        } else {
+            // 旧形式フォールバック: "interests":["a","b"] → "その他" に格納
+            auto old = extractArray(profileJson, "interests");
+            for (auto& s : old) {
+                InterestEntry entry;
+                entry.keyword = std::move(s);
+                userProfile_.interests["\xe3\x81\x9d\xe3\x81\xae\xe4\xbb\x96"].push_back(std::move(entry));
+            }
+        }
     }
 
     // Load app usage (JSON)
@@ -464,12 +546,23 @@ bool LongTermMemory::Save() const {
         std::ostringstream json;
         json << "{\n";
         json << "  \"name\":\"" << userProfile_.name << "\",\n";
-        json << "  \"interests\":[";
-        for (size_t i = 0; i < userProfile_.interests.size(); ++i) {
-            if (i > 0) json << ",";
-            json << "\"" << userProfile_.interests[i] << "\"";
+        json << "  \"interests\":{\n";
+        {
+            size_t catIdx = 0;
+            for (auto& [cat, items] : userProfile_.interests) {
+                if (catIdx > 0) json << ",\n";
+                json << "    \"" << cat << "\":[\n";
+                for (size_t i = 0; i < items.size(); ++i) {
+                    if (i > 0) json << ",\n";
+                    json << "      {\"k\":\"" << items[i].keyword
+                         << "\",\"s\":" << items[i].score
+                         << ",\"t\":\"" << items[i].lastSeen << "\"}";
+                }
+                json << "\n    ]";
+                ++catIdx;
+            }
         }
-        json << "],\n";
+        json << "\n  },\n";
         json << "  \"dislikedTopics\":[";
         for (size_t i = 0; i < userProfile_.dislikedTopics.size(); ++i) {
             if (i > 0) json << ",";
@@ -690,6 +783,28 @@ void LongTermMemory::RecordWebService(const std::string& serviceName, const std:
     }
 }
 
+void LongTermMemory::ImportWebServiceFromHistory(const std::string& serviceName, const std::string& browserProcess, int visitCount) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto it = std::find_if(webServices_.begin(), webServices_.end(),
+        [&](const WebServiceRecord& r) { return r.serviceName == serviceName; });
+
+    if (it != webServices_.end()) {
+        if (it->browserProcess.empty() && !browserProcess.empty()) {
+            it->browserProcess = browserProcess;
+        }
+    } else {
+        WebServiceRecord rec;
+        rec.serviceName = serviceName;
+        rec.browserProcess = browserProcess;
+        rec.totalMinutes = 0.0f;
+        rec.visitCount = visitCount;
+        rec.firstVisited = GetCurrentTimeString();
+        rec.lastVisited = rec.firstVisited;
+        webServices_.push_back(std::move(rec));
+    }
+}
+
 void LongTermMemory::SetWebServiceTags(const std::string& serviceName, const std::vector<std::string>& tags) {
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = std::find_if(webServices_.begin(), webServices_.end(),
@@ -812,20 +927,26 @@ std::string LongTermMemory::BuildContextString() const {
     std::ostringstream ctx;
 
     if (!userProfile_.name.empty() || !userProfile_.interests.empty()) {
-        ctx << "## ユーザー情報\n";
+        ctx << "## \xe3\x83\xa6\xe3\x83\xbc\xe3\x82\xb6\xe3\x83\xbc\xe6\x83\x85\xe5\xa0\xb1\n";
         if (!userProfile_.name.empty()) {
-            ctx << "- 名前: " << userProfile_.name << "\n";
+            ctx << "- \xe5\x90\x8d\xe5\x89\x8d: " << userProfile_.name << "\n";
         }
-        if (!userProfile_.interests.empty()) {
-            ctx << "- 興味: ";
-            for (size_t i = 0; i < userProfile_.interests.size(); ++i) {
+        for (auto& [cat, items] : userProfile_.interests) {
+            if (items.empty()) continue;
+            // score上位10件を表示
+            auto sorted = items;
+            std::sort(sorted.begin(), sorted.end(), [](auto& a, auto& b) {
+                return a.score > b.score;
+            });
+            ctx << "- " << cat << ": ";
+            for (size_t i = 0; i < sorted.size() && i < 10; ++i) {
                 if (i > 0) ctx << ", ";
-                ctx << userProfile_.interests[i];
+                ctx << sorted[i].keyword;
             }
             ctx << "\n";
         }
         if (!userProfile_.notes.empty()) {
-            ctx << "- メモ: " << userProfile_.notes << "\n";
+            ctx << "- \xe3\x83\xa1\xe3\x83\xa2: " << userProfile_.notes << "\n";
         }
         ctx << "\n";
     }
@@ -883,12 +1004,15 @@ std::string LongTermMemory::BuildContextString() const {
         for (auto& ws : webServices_) wsSorted.push_back(&ws);
         std::sort(wsSorted.begin(), wsSorted.end(),
             [](const WebServiceRecord* a, const WebServiceRecord* b) {
-                return a->totalMinutes > b->totalMinutes;
+                return (a->totalMinutes + a->visitCount) > (b->totalMinutes + b->visitCount);
             });
         int count = 0;
         for (auto* ws : wsSorted) {
-            if (count >= 5) break;
+            if (count >= 10) break;
             ctx << "- " << ws->serviceName;
+            if (!ws->browserProcess.empty()) {
+                ctx << " (" << ws->browserProcess << ")";
+            }
             if (!ws->tags.empty()) {
                 ctx << " [";
                 for (size_t i = 0; i < ws->tags.size(); ++i) {
@@ -984,6 +1108,126 @@ std::string LongTermMemory::BuildContextString(const std::string& query) const {
         ctx << "- [" << f.category << "] " << f.content << " (" << f.learnedAt << ")\n";
     }
     return ctx.str();
+}
+
+std::string LongTermMemory::BuildCompactContext(const std::string& query) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::ostringstream ctx;
+
+    if (!userProfile_.interests.empty()) {
+        ctx << "## \xe3\x83\xa6\xe3\x83\xbc\xe3\x82\xb6\xe3\x83\xbc\xe3\x81\xae\xe8\x88\x88\xe5\x91\xb3\n";
+        for (auto& [cat, items] : userProfile_.interests) {
+            if (items.empty()) continue;
+            auto sorted = items;
+            std::sort(sorted.begin(), sorted.end(), [](auto& a, auto& b) {
+                return a.score > b.score;
+            });
+            ctx << cat << ": ";
+            for (size_t i = 0; i < sorted.size() && i < 5; ++i) {
+                if (i > 0) ctx << ", ";
+                ctx << sorted[i].keyword;
+            }
+            ctx << "\n";
+        }
+        ctx << "\n";
+    }
+
+    if (!webServices_.empty()) {
+        ctx << "## Webサービス利用\n";
+        std::vector<const WebServiceRecord*> wsSorted;
+        for (auto& ws : webServices_) wsSorted.push_back(&ws);
+        std::sort(wsSorted.begin(), wsSorted.end(),
+            [](const WebServiceRecord* a, const WebServiceRecord* b) {
+                return (a->totalMinutes + a->visitCount) > (b->totalMinutes + b->visitCount);
+            });
+        int count = 0;
+        for (auto* ws : wsSorted) {
+            if (count >= 5) break;
+            ctx << "- " << ws->serviceName;
+            if (!ws->browserProcess.empty()) ctx << "(" << ws->browserProcess << ")";
+            ctx << " " << ws->visitCount << "回\n";
+            ++count;
+        }
+        ctx << "\n";
+    }
+
+    if (db_ && !query.empty()) {
+        sqlite3_stmt* stmt = nullptr;
+        const char* sql =
+            "SELECT content FROM facts "
+            "WHERE content LIKE ?1 OR category LIKE ?1 "
+            "ORDER BY importance DESC LIMIT 3";
+        if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+            std::string pattern = "%" + query + "%";
+            sqlite3_bind_text(stmt, 1, pattern.c_str(), -1, SQLITE_TRANSIENT);
+            bool hasData = false;
+            while (sqlite3_step(stmt) == SQLITE_ROW) {
+                if (!hasData) { ctx << "## 関連する記憶\n"; hasData = true; }
+                ctx << "- " << SafeText(sqlite3_column_text(stmt, 0)) << "\n";
+            }
+            sqlite3_finalize(stmt);
+        }
+    }
+
+    return ctx.str();
+}
+
+void LongTermMemory::AddInterest(const std::string& category, const std::string& keyword) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto& items = userProfile_.interests[category];
+
+    // 既存なら score を強化
+    for (auto& e : items) {
+        if (e.keyword == keyword) {
+            ++e.score;
+            // 現在日時を更新
+            auto now = std::chrono::system_clock::now();
+            auto tt = std::chrono::system_clock::to_time_t(now);
+            char buf[20];
+            std::strftime(buf, sizeof(buf), "%Y-%m-%d", std::localtime(&tt));
+            e.lastSeen = buf;
+            return;
+        }
+    }
+
+    // 新規追加
+    InterestEntry entry;
+    entry.keyword = keyword;
+    entry.score = 1;
+    {
+        auto now = std::chrono::system_clock::now();
+        auto tt = std::chrono::system_clock::to_time_t(now);
+        char buf[20];
+        std::strftime(buf, sizeof(buf), "%Y-%m-%d", std::localtime(&tt));
+        entry.lastSeen = buf;
+    }
+    items.push_back(std::move(entry));
+
+    // 上限超過 → 最低スコアを淘汰
+    if (static_cast<int>(items.size()) > UserProfile::kMaxEntriesPerCategory) {
+        std::sort(items.begin(), items.end(), [](auto& a, auto& b) {
+            return a.score < b.score;
+        });
+        items.erase(items.begin());
+    }
+}
+
+std::vector<std::string> LongTermMemory::GetInterests(const std::string& category, int limit) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = userProfile_.interests.find(category);
+    if (it == userProfile_.interests.end()) return {};
+
+    // score 降順でソートしたコピー
+    auto sorted = it->second;
+    std::sort(sorted.begin(), sorted.end(), [](auto& a, auto& b) {
+        return a.score > b.score;
+    });
+
+    std::vector<std::string> result;
+    for (int i = 0; i < limit && i < static_cast<int>(sorted.size()); ++i) {
+        result.push_back(sorted[i].keyword);
+    }
+    return result;
 }
 
 bool LongTermMemory::LoadJson(const std::string& filePath, std::string& outContent) const {

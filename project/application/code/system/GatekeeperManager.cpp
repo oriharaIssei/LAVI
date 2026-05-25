@@ -1,6 +1,8 @@
 #include "GatekeeperManager.h"
 #include "SharedMediaContext.h"
 #include "EmotionTag.h"
+#include "WebAction.h"
+#include "LongTermMemory.h"
 
 #define ENGINE_INCLUDE
 #define ENGINE_MEDIA_CAPTURE
@@ -158,19 +160,75 @@ void GatekeeperManager::FlushPending(double now) {
 
     // 自動エスカレーション
     if (config_.autoEscalate && !llmBusy_ && (now - lastEscalate_ >= config_.escalateCooldown)) {
-        Dispatch(decisions_.back(), now);
+        auto& latest = decisions_.back();
+
+        // ローカルで処理できるか試す (APIコール不要)
+        if (latest.target == RouteTarget::WebSearch && ctx_ && longTermMemory_) {
+            auto localResult = TryLocalAction(ctx_->transcribedText, longTermMemory_, embedding_);
+            if (localResult.handled) {
+                lastResponse_ = localResult.spokenText;
+                lastEscalate_ = now;
+                if (config_.autoSpeak) {
+                    Speak(localResult.spokenText);
+                }
+                return;
+            }
+        }
+
+        Dispatch(latest, now);
     }
+}
+
+static bool ContainsSummaryKeyword(const std::string& text) {
+    static const char* kw[] = {
+        "\xE8\xA6\x81\xE7\xB4\x84", // 要約
+        "\xE3\x81\xBE\xE3\x81\xA8\xE3\x82\x81", // まとめ
+        "\xE8\xAA\xAC\xE6\x98\x8E", // 説明
+        "summary",
+    };
+    for (const auto* k : kw) {
+        if (text.find(k) != std::string::npos) return true;
+    }
+    return false;
 }
 
 void GatekeeperManager::Dispatch(const RouteDecision& dec, double now) {
     if (!ctx_ || ctx_->config.apiKey.empty() || llmBusy_) return;
 
-    llm_.SetApiKey(ctx_->config.apiKey);
-    if (!ctx_->config.llmSystemPrompt.empty()) {
-        llm_.SetSystemPrompt(ctx_->config.llmSystemPrompt);
+    std::string systemPrompt = ctx_->config.llmSystemPrompt;
+
+    bool hasMic = false;
+    for (auto s : dec.sources) {
+        if (s == GateSource::Mic) { hasMic = true; break; }
     }
+
+    if (dec.target == RouteTarget::WebSearch || hasMic) {
+        systemPrompt += "\n\n";
+        systemPrompt += GetWebActionPrompt();
+    }
+
+    if (longTermMemory_) {
+        std::string memCtx = longTermMemory_->BuildCompactContext(ctx_->transcribedText);
+        if (!memCtx.empty()) {
+            systemPrompt += "\n\n" + memCtx;
+        }
+    }
+
+    llm_.SetApiKey(ctx_->config.apiKey);
+    llm_.SetSystemPrompt(systemPrompt);
+
+    bool needSummary = (dec.target == RouteTarget::WebSearch)
+                       && ContainsSummaryKeyword(ctx_->transcribedText);
+    llm_.SetEnableWebSearch(needSummary);
+
+    std::string prompt = dec.prompt;
+    if (hasMic && !ctx_->transcribedText.empty()) {
+        prompt += "\n\n\xE3\x83\xA6\xE3\x83\xBC\xE3\x82\xB6\xE3\x83\xBC\xE3\x81\xAE\xE7\x99\xBA\xE8\xA9\xB1: "; // ユーザーの発話:
+        prompt += ctx_->transcribedText;
+    }
+
     llm_.ClearHistory();
-    llm_.AddMessage("user", dec.prompt);
+    llm_.AddMessage("user", prompt);
 
     llmFuture_ = llm_.SendAsync();
     llmBusy_ = true;
@@ -184,8 +242,14 @@ void GatekeeperManager::PollLlm() {
     LLMResponse resp = llmFuture_.get();
     llmBusy_ = false;
     lastResponse_ = resp.success ? resp.content : ("[Error] " + resp.error);
-    if (resp.success && config_.autoSpeak) {
-        Speak(resp.content);
+    if (resp.success) {
+        auto actions = ParseWebActions(resp.content);
+        if (!actions.empty()) {
+            ExecuteWebActions(actions, longTermMemory_);
+        }
+        if (config_.autoSpeak) {
+            Speak(StripWebActions(resp.content));
+        }
     }
 }
 
@@ -208,18 +272,65 @@ void GatekeeperManager::Speak(const std::string& text) {
 
 void GatekeeperManager::EscalateLatest() {
     if (decisions_.empty() || llmBusy_) return;
-    Dispatch(decisions_.back(), NowSec());
+    auto& dec = decisions_.back();
+    double now = NowSec();
+
+    if (dec.target == RouteTarget::WebSearch && ctx_ && longTermMemory_) {
+        auto localResult = TryLocalAction(ctx_->transcribedText, longTermMemory_, embedding_);
+        if (localResult.handled) {
+            lastResponse_ = localResult.spokenText;
+            lastEscalate_ = now;
+            if (config_.autoSpeak) Speak(localResult.spokenText);
+            return;
+        }
+    }
+
+    Dispatch(dec, now);
 }
 
-RouteTarget GatekeeperManager::Classify(const std::vector<GateEvent>& evs) {
+static bool ContainsSearchKeyword(const std::string& text) {
+    static const char* kw[] = {
+        "\xE8\xAA\xBF\xE3\x81\xB9",     // 調べ
+        "\xE6\xA4\x9C\xE7\xB4\xA2",     // 検索
+        "\xE3\x82\xB5\xE3\x83\xBC\xE3\x83\x81", // サーチ
+        "\xE6\xB5\x81\xE3\x81\x97\xE3\x81\xA6", // 流して
+        "\xE9\x96\x8B\xE3\x81\x84\xE3\x81\xA6", // 開いて
+        "\xE8\xA6\x8B\xE3\x81\x9B\xE3\x81\xA6", // 見せて
+        "\xE6\x8E\xA2\xE3\x81\x97\xE3\x81\xA6", // 探して
+        "\xE3\x81\x8B\xE3\x81\x91\xE3\x81\xA6", // かけて
+        "\xE5\x86\x8D\xE7\x94\x9F",     // 再生
+        "\xE8\x81\x9E\xE3\x81\x8B\xE3\x81\x9B\xE3\x81\xA6", // 聞かせて
+        "\xE3\x81\xA4\xE3\x81\x91\xE3\x81\xA6", // つけて
+        "\xE9\x9F\xB3\xE6\xA5\xBD",     // 音楽
+        "\xE5\x8B\x95\xE7\x94\xBB",     // 動画
+        "YouTube", "youtube",
+        "Spotify", "spotify",
+        "search",
+    };
+    for (const auto* w : kw) {
+        if (text.find(w) != std::string::npos) return true;
+    }
+    return false;
+}
+
+RouteTarget GatekeeperManager::Classify(const std::vector<GateEvent>& evs) const {
     bool cam = false, scr = false, mic = false;
+    bool hasSearch = false;
     for (const auto& e : evs) {
         if (e.source == GateSource::Camera) cam = true;
         else if (e.source == GateSource::Screen) scr = true;
-        else if (e.source == GateSource::Mic) mic = true;
+        else if (e.source == GateSource::Mic) {
+            mic = true;
+            if (ContainsSearchKeyword(e.description)) hasSearch = true;
+        }
+    }
+    // イベント説明だけでなく、ユーザーの実際の発話も確認
+    if (mic && !hasSearch && ctx_ && !ctx_->transcribedText.empty()) {
+        hasSearch = ContainsSearchKeyword(ctx_->transcribedText);
     }
     const int distinct = (cam ? 1 : 0) + (scr ? 1 : 0) + (mic ? 1 : 0);
     if (distinct > 1) return RouteTarget::Multi;
+    if (mic && hasSearch) return RouteTarget::WebSearch;
     if (mic) return RouteTarget::Conversation;
     if (scr) return RouteTarget::VisionScreen;
     if (cam) return RouteTarget::VisionCamera;
@@ -236,6 +347,17 @@ std::string GatekeeperManager::BuildPrompt(const std::vector<GateEvent>& evs, Ro
     switch (t) {
         case RouteTarget::Conversation:
             p += "ユーザーが話しかけています。自然に応答してください。";
+            break;
+        case RouteTarget::WebSearch:
+            p += "\xE3\x83\xA6\xE3\x83\xBC\xE3\x82\xB6\xE3\x83\xBC\xE3\x81\x8C"  // ユーザーが
+                 "Web\xE3\x81\xA7\xE4\xBD\x95\xE3\x81\x8B\xE3\x82\x92\xE3\x81\x97\xE3\x81\x9F\xE3\x81\x84\xE3\x82\x88\xE3\x81\x86\xE3\x81\xA7\xE3\x81\x99\xE3\x80\x82" // Webで何かをしたいようです。
+                 "\xE9\x9F\xB3\xE6\xA5\xBD\xE3\x82\x92\xE8\x81\xB4\xE3\x81\x8D\xE3\x81\x9F\xE3\x81\x84\xE3\x83\xBB" // 音楽を聴きたい・
+                 "\xE5\x8B\x95\xE7\x94\xBB\xE3\x82\x92\xE8\xA6\x8B\xE3\x81\x9F\xE3\x81\x84\xE3\x83\xBB" // 動画を見たい・
+                 "\xE3\x82\xB5\xE3\x82\xA4\xE3\x83\x88\xE3\x82\x92\xE9\x96\x8B\xE3\x81\x8D\xE3\x81\x9F\xE3\x81\x84" // サイトを開きたい
+                 "\xE5\xA0\xB4\xE5\x90\x88\xE3\x81\xAF [browser:URL] \xE3\x82\xBF\xE3\x82\xB0\xE3\x81\xA7" // 場合は [browser:URL] タグで
+                 "URL\xE3\x82\x92\xE5\x87\xBA\xE5\x8A\x9B\xE3\x81\x97\xE3\x81\xA6\xE3\x81\x8F\xE3\x81\xA0\xE3\x81\x95\xE3\x81\x84\xE3\x80\x82" // URLを出力してください。
+                 "\xE8\xA6\x81\xE7\xB4\x84\xE3\x82\x84\xE8\xAA\xBF\xE3\x81\xB9\xE7\x89\xA9\xE3\x81\xAF" // 要約や調べ物は
+                 "\xE3\x83\x86\xE3\x82\xAD\xE3\x82\xB9\xE3\x83\x88\xE3\x81\xA7\xE5\x9B\x9E\xE7\xAD\x94\xE3\x81\x97\xE3\x81\xA6\xE3\x81\x8F\xE3\x81\xA0\xE3\x81\x95\xE3\x81\x84\xE3\x80\x82"; // テキストで回答してください。
             break;
         case RouteTarget::VisionScreen:
             p += "画面に変化がありました。状況を踏まえて短く一言コメントしてください。";
@@ -270,6 +392,7 @@ const char* GatekeeperManager::SourceName(GateSource s) {
 const char* GatekeeperManager::TargetName(RouteTarget t) {
     switch (t) {
         case RouteTarget::Conversation: return "Conversation";
+        case RouteTarget::WebSearch:    return "WebSearch";
         case RouteTarget::VisionScreen: return "VisionScreen";
         case RouteTarget::VisionCamera: return "VisionCamera";
         case RouteTarget::Multi:        return "Multi";

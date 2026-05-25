@@ -10,8 +10,12 @@
 #include "GatekeeperManager.h"
 #include "GatekeeperPanel.h"
 #include "MemoryPanel.h"
+#include "SentenceEmbedding.h"
+#include "WebAction.h"
 
 #include "imgui/imgui.h"
+
+#include <filesystem>
 
 MediaCaptureDemoSystem::MediaCaptureDemoSystem()
     : OriGine::ISystem(OriGine::SystemCategory::Render) {}
@@ -42,6 +46,23 @@ void MediaCaptureDemoSystem::Initialize() {
     gkPanel_->Initialize(ctx_.get(), gkManager_.get());
     memoryPanel_->Initialize(ctx_.get(), gkManager_.get());
     llmPanel_->SetMemoryPanel(memoryPanel_.get());
+    gkManager_->SetLongTermMemory(memoryPanel_->GetLongTermMemory());
+
+    LoadTagAxes("application/resource/memory/tag_axes.json");
+
+    // Sentence Embedding (存在すれば読み込み)
+    const std::filesystem::path embDir = "application/resource/embedding";
+    const std::filesystem::path modelPath = embDir / "model.onnx";
+    const std::filesystem::path vocabPath = embDir / "vocab.txt";
+    if (std::filesystem::exists(modelPath) && std::filesystem::exists(vocabPath)) {
+        embedding_ = std::make_unique<SentenceEmbedding>();
+        if (embedding_->LoadModel(modelPath.wstring(), vocabPath.string())) {
+            gkManager_->SetSentenceEmbedding(embedding_.get());
+            llmPanel_->SetSentenceEmbedding(embedding_.get());
+        } else {
+            embedding_.reset();
+        }
+    }
 }
 
 void MediaCaptureDemoSystem::Finalize() {

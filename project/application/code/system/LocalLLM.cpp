@@ -143,6 +143,52 @@ std::string LocalLLM::Generate(const std::string& prompt) {
     return result;
 }
 
+bool LocalLLM::HasChatTemplate() const {
+    if (!model_) return false;
+    const char* tmpl = llama_model_chat_template(model_, nullptr);
+    return tmpl != nullptr && tmpl[0] != '\0';
+}
+
+std::string LocalLLM::GenerateChat(const std::string& systemPrompt, const std::string& userPrompt) {
+    if (!model_) return Generate(userPrompt);
+
+    const char* tmpl = llama_model_chat_template(model_, nullptr);
+    if (!tmpl || tmpl[0] == '\0') {
+        // chat template なし → raw 生成にフォールバック
+        std::string combined;
+        if (!systemPrompt.empty()) {
+            combined = systemPrompt + "\n\n" + userPrompt;
+        } else {
+            combined = userPrompt;
+        }
+        return Generate(combined);
+    }
+
+    // llama_chat_apply_template でフォーマット
+    std::vector<llama_chat_message> messages;
+    llama_chat_message sysMsg{};
+    sysMsg.role = "system";
+    sysMsg.content = systemPrompt.c_str();
+    llama_chat_message userMsg{};
+    userMsg.role = "user";
+    userMsg.content = userPrompt.c_str();
+
+    if (!systemPrompt.empty()) messages.push_back(sysMsg);
+    messages.push_back(userMsg);
+
+    std::vector<char> buf(contextSize_ * 4);
+    int len = llama_chat_apply_template(
+        tmpl, messages.data(), static_cast<int32_t>(messages.size()),
+        true, buf.data(), static_cast<int32_t>(buf.size()));
+
+    if (len < 0 || len > static_cast<int>(buf.size())) {
+        return Generate(systemPrompt.empty() ? userPrompt : systemPrompt + "\n\n" + userPrompt);
+    }
+
+    std::string formatted(buf.data(), len);
+    return Generate(formatted);
+}
+
 std::future<std::string> LocalLLM::GenerateAsync(const std::string& prompt) {
     return std::async(std::launch::async, [this, prompt]() {
         return Generate(prompt);

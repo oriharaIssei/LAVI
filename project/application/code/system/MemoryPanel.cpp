@@ -26,6 +26,7 @@ void MemoryPanel::Initialize(SharedMediaContext* ctx, GatekeeperManager* gkManag
     longTermMemory_ = std::make_unique<LongTermMemory>();
 
     browsingCollector_ = std::make_unique<BrowsingHistoryCollector>();
+    browsingCollector_->LoadCategories("application/resource/memory/tag_axes.json");
     userIdentifier_ = std::make_unique<UserIdentifier>();
     appTracker_ = std::make_unique<AppUsageTracker>();
 
@@ -34,7 +35,7 @@ void MemoryPanel::Initialize(SharedMediaContext* ctx, GatekeeperManager* gkManag
     longTermMemory_->SetStoragePath("application/resource/memory");
     longTermMemory_->Load();
 
-    localModelPath_ = "application/resource/llm/models/gemma-2-2b-jpn-it-Q4_K_M.gguf";
+    localModelPath_ = "application/resource/llm/models/Qwen3-4B-Q4_K_M.gguf";
     arcfaceModelPath_ = "application/resource/gatekeeper/arcfaceresnet100.onnx";
 
     // ArcFace があれば自動ロード
@@ -331,6 +332,12 @@ void MemoryPanel::Draw() {
             for (auto* ws : wsSorted) {
                 if (wsShown >= 10) break;
                 int min = static_cast<int>(ws->totalMinutes);
+                std::string info = ws->serviceName;
+                if (!ws->browserProcess.empty()) {
+                    info += " (";
+                    info += ws->browserProcess;
+                    info += ")";
+                }
                 std::string tagStr;
                 for (size_t i = 0; i < ws->tags.size(); ++i) {
                     if (i > 0) tagStr += ", ";
@@ -338,10 +345,10 @@ void MemoryPanel::Draw() {
                 }
                 if (tagStr.empty()) {
                     ImGui::BulletText("%s - %dmin, %d visits",
-                        ws->serviceName.c_str(), min, ws->visitCount);
+                        info.c_str(), min, ws->visitCount);
                 } else {
                     ImGui::BulletText("%s [%s] - %dmin, %d visits",
-                        ws->serviceName.c_str(), tagStr.c_str(), min, ws->visitCount);
+                        info.c_str(), tagStr.c_str(), min, ws->visitCount);
                 }
                 ++wsShown;
             }
@@ -363,8 +370,22 @@ void MemoryPanel::Draw() {
         if (interests.empty()) {
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "(none)");
         } else {
-            for (size_t i = 0; i < interests.size(); ++i) {
-                ImGui::BulletText("%s", interests[i].c_str());
+            for (auto& [cat, items] : interests) {
+                if (items.empty()) continue;
+                ImGui::Text("%s (%d):", cat.c_str(), static_cast<int>(items.size()));
+                ImGui::Indent();
+                auto sorted = items;
+                std::sort(sorted.begin(), sorted.end(), [](auto& a, auto& b) {
+                    return a.score > b.score;
+                });
+                for (size_t i = 0; i < sorted.size() && i < 5; ++i) {
+                    ImGui::BulletText("%s (x%d)", sorted[i].keyword.c_str(), sorted[i].score);
+                }
+                if (sorted.size() > 5) {
+                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
+                        "... +%d more", static_cast<int>(sorted.size()) - 5);
+                }
+                ImGui::Unindent();
             }
         }
 
@@ -387,6 +408,11 @@ void MemoryPanel::Draw() {
             }
             if (!canCollect) ImGui::EndDisabled();
 
+            ImGui::SameLine();
+            if (ImGui::Button("Preview History##browse")) {
+                browsingCollector_->ReadRecentHistory(500, 7);
+            }
+
             if (browsingCollector_->LastCollectedCount() > 0) {
                 ImGui::SameLine();
                 ImGui::Text("Last: +%d", browsingCollector_->LastCollectedCount());
@@ -394,6 +420,70 @@ void MemoryPanel::Draw() {
             if (!browsingCollector_->LastError().empty()) {
                 ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "%s",
                     browsingCollector_->LastError().c_str());
+            }
+        }
+
+        // 収集レポート
+        auto& report = browsingCollector_->LastReport();
+        if (!report.browsers.empty()) {
+            ImGui::Indent();
+            for (auto& bi : report.browsers) {
+                if (bi.found) {
+                    ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f),
+                        "%s: %d entries", bi.name.c_str(), bi.entryCount);
+                } else {
+                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
+                        "%s: not found", bi.name.c_str());
+                }
+            }
+            if (report.totalEntries > 0) {
+                ImGui::Text("Total: %d entries", report.totalEntries);
+            }
+            if (report.servicesFound > 0) {
+                ImGui::Text("Services: %d", report.servicesFound);
+            }
+            ImGui::Text("Categories loaded: %d", report.categoriesLoaded);
+            if (!report.extractedKeywords.empty()) {
+                if (ImGui::TreeNode("Extracted Keywords##report")) {
+                    for (auto& kw : report.extractedKeywords) {
+                        ImGui::BulletText("%s", kw.c_str());
+                    }
+                    ImGui::TreePop();
+                }
+            }
+            if (!report.rejectedLines.empty()) {
+                if (ImGui::TreeNode("Rejected##report")) {
+                    for (auto& r : report.rejectedLines) {
+                        ImGui::TextColored(ImVec4(1, 0.5f, 0.3f, 1), "%s", r.c_str());
+                    }
+                    ImGui::TreePop();
+                }
+            }
+            if (!report.llmRawOutput.empty()) {
+                if (ImGui::TreeNode("LLM Raw Output##report")) {
+                    ImGui::TextWrapped("%s", report.llmRawOutput.c_str());
+                    ImGui::TreePop();
+                }
+            }
+            ImGui::Unindent();
+        }
+
+        auto& rawEntries = browsingCollector_->LastRawEntries();
+        if (!rawEntries.empty()) {
+            if (ImGui::TreeNode("Raw History##rawbrowse")) {
+                ImGui::Text("%d entries", static_cast<int>(rawEntries.size()));
+                if (ImGui::BeginChild("##rawhistscroll", ImVec2(0, 300), true)) {
+                    for (auto& e : rawEntries) {
+                        ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "[%s] %s",
+                            e.browserName.c_str(), e.lastVisit.c_str());
+                        ImGui::TextWrapped("  %s", e.title.c_str());
+                        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "  %s (x%d)",
+                            e.url.c_str(), e.visitCount);
+                        ImGui::Separator();
+                    }
+                }
+                ImGui::EndChild();
+                ImGui::TreePop();
             }
         }
 
