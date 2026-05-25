@@ -62,3 +62,4 @@ Thumbs.db
 /docs
 /project/application/resource/whisper
 project/imgui.ini
+*.onnx
