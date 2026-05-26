@@ -4,17 +4,27 @@
 #include <vector>
 
 class LongTermMemory;
-class SentenceEmbedding;
 
 struct WebAction {
     std::string url;
 };
 
+// LLM output [browser:URL] tag handling
 std::vector<WebAction> ParseWebActions(const std::string& text);
 std::string StripWebActions(const std::string& text);
 void ExecuteWebActions(const std::vector<WebAction>& actions, LongTermMemory* memory = nullptr);
 
+// LLM system prompt for web action capability
 const char* GetWebActionPrompt();
+
+// Tag axes loading (used by LearnInterestsFromSpeech)
+bool LoadTagAxes(const std::string& jsonPath);
+
+// Learn user interests from speech content
+void LearnInterestsFromSpeech(const std::string& speech, LongTermMemory* memory);
+
+// Legacy: kept for backward compatibility, prefer ActionPipeline
+bool ContainsActionKeyword(const std::string& text);
 
 struct LocalActionResult {
     bool handled = false;
@@ -24,11 +34,6 @@ struct LocalActionResult {
     std::string spokenText;
 };
 
+class SentenceEmbedding;
 LocalActionResult TryLocalAction(const std::string& speech, LongTermMemory* memory,
                                  SentenceEmbedding* embedding = nullptr);
-
-bool ContainsActionKeyword(const std::string& text);
-
-bool LoadTagAxes(const std::string& jsonPath);
-
-void LearnInterestsFromSpeech(const std::string& speech, LongTermMemory* memory);

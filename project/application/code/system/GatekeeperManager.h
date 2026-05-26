@@ -15,6 +15,7 @@
 struct SharedMediaContext;
 class LongTermMemory;
 class SentenceEmbedding;
+class ActionPipeline;
 
 enum class GateSource { Camera, Screen, Mic };
 
@@ -72,6 +73,7 @@ public:
     void Initialize(SharedMediaContext* ctx);
     void SetLongTermMemory(LongTermMemory* mem) { longTermMemory_ = mem; }
     void SetSentenceEmbedding(SentenceEmbedding* emb) { embedding_ = emb; }
+    void SetActionPipeline(ActionPipeline* pipeline) { actionPipeline_ = pipeline; }
     void Update();  // MediaCaptureDemoSystem::Update から毎フレーム呼ぶ
 
     CameraGatekeeper* Camera() { return camera_.get(); }
@@ -140,4 +142,5 @@ private:
     double lastEscalate_ = -1.0e9;
     LongTermMemory* longTermMemory_ = nullptr;
     SentenceEmbedding* embedding_ = nullptr;
+    ActionPipeline* actionPipeline_ = nullptr;
 };

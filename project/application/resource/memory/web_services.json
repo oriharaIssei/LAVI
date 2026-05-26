@@ -1,6 +1,6 @@
 [
-  {"serviceName":"YouTube","browser":"brave.exe","tags":["娯楽","動画","音楽","閲覧"],"totalMinutes":10.3519,"visitCount":34,"firstVisited":"2026-05-23 21:03","lastVisited":"2026-05-24 20:25"},
-  {"serviceName":"Twitter/X","browser":"brave.exe","tags":["交流","テキスト","発信"],"totalMinutes":40.2478,"visitCount":27,"firstVisited":"2026-05-23 21:07","lastVisited":"2026-05-24 20:32"},
+  {"serviceName":"YouTube","browser":"brave.exe","tags":["娯楽","動画","音楽","閲覧"],"totalMinutes":18.0079,"visitCount":48,"firstVisited":"2026-05-23 21:03","lastVisited":"2026-05-26 09:48"},
+  {"serviceName":"Twitter/X","browser":"brave.exe","tags":["交流","テキスト","発信"],"totalMinutes":40.4495,"visitCount":30,"firstVisited":"2026-05-23 21:07","lastVisited":"2026-05-25 13:24"},
   {"serviceName":"はてな","browser":"brave.exe","tags":[],"totalMinutes":0,"visitCount":1,"firstVisited":"2026-05-24 09:23","lastVisited":"2026-05-24 09:23"},
   {"serviceName":"GitHub","browser":"brave.exe","tags":["開発","コード","作業"],"totalMinutes":0.402646,"visitCount":10,"firstVisited":"2026-05-24 09:23","lastVisited":"2026-05-24 19:09"},
   {"serviceName":"Qiita","browser":"brave.exe","tags":[],"totalMinutes":0,"visitCount":2,"firstVisited":"2026-05-24 09:23","lastVisited":"2026-05-24 09:23"},

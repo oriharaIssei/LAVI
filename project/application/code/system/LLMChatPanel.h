@@ -12,12 +12,14 @@
 struct SharedMediaContext;
 class MemoryPanel;
 class SentenceEmbedding;
+class ActionPipeline;
 
 class LLMChatPanel {
 public:
     void Initialize(SharedMediaContext* ctx);
     void SetMemoryPanel(MemoryPanel* memPanel);
     void SetSentenceEmbedding(SentenceEmbedding* emb) { embedding_ = emb; }
+    void SetActionPipeline(ActionPipeline* pipeline) { actionPipeline_ = pipeline; }
     void Finalize();
     void Draw();
 
@@ -64,4 +66,5 @@ private:
     MemoryPanel* memoryPanel_ = nullptr;
     bool useMemoryContext_ = true;
     SentenceEmbedding* embedding_ = nullptr;
+    ActionPipeline* actionPipeline_ = nullptr;
 };

@@ -3,6 +3,7 @@
 #include "EmotionTag.h"
 #include "WebAction.h"
 #include "LongTermMemory.h"
+#include "ActionPipeline.h"
 
 #define ENGINE_INCLUDE
 #define ENGINE_MEDIA_CAPTURE
@@ -162,14 +163,14 @@ void GatekeeperManager::FlushPending(double now) {
     if (config_.autoEscalate && !llmBusy_ && (now - lastEscalate_ >= config_.escalateCooldown)) {
         auto& latest = decisions_.back();
 
-        // ローカルで処理できるか試す (APIコール不要)
-        if (latest.target == RouteTarget::WebSearch && ctx_ && longTermMemory_) {
-            auto localResult = TryLocalAction(ctx_->transcribedText, longTermMemory_, embedding_);
-            if (localResult.handled) {
-                lastResponse_ = localResult.spokenText;
+        // ActionPipeline でローカル処理を試みる (APIコール不要)
+        if (latest.target == RouteTarget::WebSearch && ctx_ && longTermMemory_ && actionPipeline_) {
+            auto actionResult = actionPipeline_->Process(ctx_->transcribedText, longTermMemory_, embedding_);
+            if (actionResult.handled) {
+                lastResponse_ = actionResult.spokenText;
                 lastEscalate_ = now;
                 if (config_.autoSpeak) {
-                    Speak(localResult.spokenText);
+                    Speak(actionResult.spokenText);
                 }
                 return;
             }
@@ -275,12 +276,12 @@ void GatekeeperManager::EscalateLatest() {
     auto& dec = decisions_.back();
     double now = NowSec();
 
-    if (dec.target == RouteTarget::WebSearch && ctx_ && longTermMemory_) {
-        auto localResult = TryLocalAction(ctx_->transcribedText, longTermMemory_, embedding_);
-        if (localResult.handled) {
-            lastResponse_ = localResult.spokenText;
+    if (dec.target == RouteTarget::WebSearch && ctx_ && longTermMemory_ && actionPipeline_) {
+        auto actionResult = actionPipeline_->Process(ctx_->transcribedText, longTermMemory_, embedding_);
+        if (actionResult.handled) {
+            lastResponse_ = actionResult.spokenText;
             lastEscalate_ = now;
-            if (config_.autoSpeak) Speak(localResult.spokenText);
+            if (config_.autoSpeak) Speak(actionResult.spokenText);
             return;
         }
     }

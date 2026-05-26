@@ -231,6 +231,7 @@ struct TagAxesData {
     std::unordered_map<std::string, int> tagToAxis;
     std::vector<std::string> allTags;
     std::unordered_map<std::string, std::string> synonyms;
+    std::vector<std::string> interestCategories;
     bool loaded = false;
 };
 
@@ -451,6 +452,7 @@ LocalActionResult TryLocalAction(const std::string& speech, LongTermMemory* memo
 
     // 4. 検索クエリ構築
     std::string query;
+    auto intentTags = ExtractIntentTags(speech);
 
     auto isValidQuery = [](const std::string& q) {
         if (q.empty() || q.size() < 2) return false;
@@ -458,67 +460,83 @@ LocalActionResult TryLocalAction(const std::string& speech, LongTermMemory* memo
         return true;
     };
 
-    auto facts = memory->SearchFacts(chosenService, 3);
-    for (auto& f : facts) {
-        size_t colon = f.content.find(": ");
-        if (colon == std::string::npos) colon = f.content.find(":");
-        if (colon != std::string::npos && colon + 2 < f.content.size()) {
-            std::string candidate = f.content.substr(colon + 2);
-            if (isValidQuery(candidate)) {
-                query = candidate;
-                break;
+    // 発話から関連する興味カテゴリを特定
+    std::vector<std::string> matchedCategories;
+    auto addCategory = [&](const std::string& cat) {
+        for (auto& m : matchedCategories) if (m == cat) return;
+        matchedCategories.push_back(cat);
+    };
+    for (auto& cat : g_tagAxes.interestCategories) {
+        if (speech.find(cat) != std::string::npos) addCategory(cat);
+    }
+    for (auto& [word, tag] : g_tagAxes.synonyms) {
+        if (speech.find(word) != std::string::npos) {
+            for (auto& cat : g_tagAxes.interestCategories) {
+                if (tag == cat) { addCategory(cat); break; }
             }
         }
     }
 
-    // 意図タグからカテゴリ別 interests を検索
-    auto intentTags = ExtractIntentTags(speech);
+    // カテゴリが特定できた場合、そのカテゴリの interests からクエリ構築
+    if (!matchedCategories.empty()) {
+        for (auto& cat : matchedCategories) {
+            auto catInterests = memory->GetInterests(cat, 3);
+            for (auto& kw : catInterests) {
+                if (!isValidQuery(kw)) continue;
+                if (!query.empty()) query += " ";
+                query += kw;
+            }
+        }
+    }
 
+    // カテゴリ interests が空 → facts からフィルタ付き検索
     if (query.empty()) {
-        // 意図タグに対応するカテゴリの interests を使う
-        for (auto& axisName : g_tagAxes.axisNames) {
-            auto catInterests = memory->GetInterests(axisName);
-            if (catInterests.empty()) continue;
-            // この軸のタグが intentTags に含まれるか
-            bool axisMatch = false;
-            for (auto& t : intentTags) {
-                auto it = g_tagAxes.tagToAxis.find(t);
-                if (it != g_tagAxes.tagToAxis.end()) {
-                    int idx = it->second;
-                    if (idx < static_cast<int>(g_tagAxes.axisNames.size()) &&
-                        g_tagAxes.axisNames[idx] == axisName) {
-                        axisMatch = true;
+        auto facts = memory->SearchFacts(chosenService, 10);
+        for (auto& f : facts) {
+            if (!matchedCategories.empty()) {
+                bool relevant = false;
+                for (auto& cat : matchedCategories) {
+                    if (f.category.find(cat) != std::string::npos ||
+                        f.content.find(cat) != std::string::npos) {
+                        relevant = true;
                         break;
                     }
                 }
+                if (!relevant) continue;
             }
-            if (!axisMatch) continue;
-            for (size_t i = 0; i < catInterests.size() && i < 3; ++i) {
-                if (!isValidQuery(catInterests[i])) continue;
-                if (!query.empty()) query += " ";
-                query += catInterests[i];
+            size_t colon = f.content.find(": ");
+            if (colon == std::string::npos) colon = f.content.find(":");
+            if (colon != std::string::npos && colon + 2 < f.content.size()) {
+                std::string candidate = f.content.substr(colon + 2);
+                if (isValidQuery(candidate)) {
+                    query = candidate;
+                    break;
+                }
             }
-            if (!query.empty()) break;
         }
     }
 
-    // 形式軸タグ名でもカテゴリ検索 (例: "音楽" カテゴリ)
+    // 意図タグ名がそのまま interest カテゴリと一致するケース（フォールバック）
     if (query.empty()) {
         for (auto& t : intentTags) {
-            auto catInterests = memory->GetInterests(t);
-            if (catInterests.empty()) continue;
-            for (size_t i = 0; i < catInterests.size() && i < 3; ++i) {
-                if (!isValidQuery(catInterests[i])) continue;
+            auto catInterests = memory->GetInterests(t, 3);
+            for (auto& kw : catInterests) {
+                if (!isValidQuery(kw)) continue;
                 if (!query.empty()) query += " ";
-                query += catInterests[i];
+                query += kw;
             }
             if (!query.empty()) break;
         }
     }
 
     bool isMusicIntent = false;
-    for (auto& t : intentTags) {
-        if (t == "\xE9\x9F\xB3\xE6\xA5\xBD") { isMusicIntent = true; break; }
+    for (auto& cat : matchedCategories) {
+        if (cat == "\xE9\x9F\xB3\xE6\xA5\xBD") { isMusicIntent = true; break; }
+    }
+    if (!isMusicIntent) {
+        for (auto& t : intentTags) {
+            if (t == "\xE9\x9F\xB3\xE6\xA5\xBD") { isMusicIntent = true; break; }
+        }
     }
     if (isMusicIntent && !query.empty()) query += " MIX";
 
@@ -699,6 +717,19 @@ bool LoadTagAxes(const std::string& jsonPath) {
                     g_tagAxes.synonyms[word] = tag;
                     sc = v2 + 1;
                 }
+            }
+        }
+    }
+
+    // "interest_categories" 配列をパース
+    auto icPos = json.find("\"interest_categories\"");
+    if (icPos != std::string::npos) {
+        auto icArr = json.find('[', icPos);
+        if (icArr != std::string::npos) {
+            auto icEnd = json.find(']', icArr);
+            if (icEnd != std::string::npos) {
+                std::string arrStr = json.substr(icArr + 1, icEnd - icArr - 1);
+                g_tagAxes.interestCategories = ParseJsonStringArray(arrStr);
             }
         }
     }

@@ -12,6 +12,7 @@
 #include "MemoryPanel.h"
 #include "SentenceEmbedding.h"
 #include "WebAction.h"
+#include "ActionPipeline.h"
 
 #include "imgui/imgui.h"
 
@@ -49,6 +50,11 @@ void MediaCaptureDemoSystem::Initialize() {
     gkManager_->SetLongTermMemory(memoryPanel_->GetLongTermMemory());
 
     LoadTagAxes("application/resource/memory/tag_axes.json");
+
+    actionPipeline_ = std::make_unique<ActionPipeline>();
+    actionPipeline_->LoadConfig("application/resource/memory/tag_axes.json");
+    llmPanel_->SetActionPipeline(actionPipeline_.get());
+    gkManager_->SetActionPipeline(actionPipeline_.get());
 
     // Sentence Embedding (存在すれば読み込み)
     const std::filesystem::path embDir = "application/resource/embedding";

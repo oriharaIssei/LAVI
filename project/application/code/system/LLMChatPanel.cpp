@@ -7,6 +7,7 @@
 #include "WebAction.h"
 #include "LongTermMemory.h"
 #include "SentenceEmbedding.h"
+#include "ActionPipeline.h"
 
 #define ENGINE_INCLUDE
 #define ENGINE_MEDIA_CAPTURE
@@ -179,7 +180,9 @@ void LLMChatPanel::SendLLMRequest(const std::string& text, const std::vector<LLM
         }
     }
 
-    if (llmEnableWebSearch_ || ContainsActionKeyword(text)) {
+    bool hasAction = actionPipeline_ ? actionPipeline_->ContainsActionKeyword(text)
+                                     : ContainsActionKeyword(text);
+    if (llmEnableWebSearch_ || hasAction) {
         systemPrompt += "\n\n";
         systemPrompt += GetWebActionPrompt();
     }
@@ -506,23 +509,23 @@ void LLMChatPanel::Draw() {
             LearnInterestsFromSpeech(llmUserInput_, memoryPanel_->GetLongTermMemory());
         }
 
-        // アクション系キーワードがあればローカル処理を先に試みる (API不要)
-        if (ContainsActionKeyword(llmUserInput_) && memoryPanel_) {
+        // ActionPipeline: Intent → Capability → Context → Plan → Execute
+        if (actionPipeline_ && memoryPanel_) {
             LongTermMemory* ltm = memoryPanel_->GetLongTermMemory();
-            auto localResult = TryLocalAction(llmUserInput_, ltm, embedding_);
-            if (localResult.handled) {
+            auto actionResult = actionPipeline_->Process(llmUserInput_, ltm, embedding_);
+            if (actionResult.handled) {
                 llmClient_->AddMessage("user", llmUserInput_);
-                llmClient_->AddMessage("assistant", localResult.spokenText);
+                llmClient_->AddMessage("assistant", actionResult.spokenText);
                 if (memoryPanel_) {
                     memoryPanel_->GetConversationMemory()->PushMessage("user", llmUserInput_);
-                    memoryPanel_->GetConversationMemory()->PushMessage("assistant", localResult.spokenText);
+                    memoryPanel_->GetConversationMemory()->PushMessage("assistant", actionResult.spokenText);
                     memoryPanel_->NotifyUserMessage(llmUserInput_);
                 }
                 if (llmSpeakResponse_ && ctx_->voiceVox && ctx_->voiceVox->IsEngineReady()
                     && !ctx_->voiceVoxSpeakers.empty()) {
                     int speakerId = ctx_->voiceVoxSpeakers[ctx_->selectedSpeaker].id;
                     synthPipeline_.StartSession(ctx_->voiceVox, speakerId);
-                    synthPipeline_.FeedDelta(localResult.spokenText);
+                    synthPipeline_.FeedDelta(actionResult.spokenText);
                     synthPipeline_.FeedDone();
                 }
                 llmUserInput_.clear();
