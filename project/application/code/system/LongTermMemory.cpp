@@ -80,6 +80,29 @@ bool LongTermMemory::InitDatabase() {
         ")");
     ExecSql("CREATE INDEX IF NOT EXISTS idx_facts_category ON facts(category)");
 
+    ExecSql(
+        "CREATE TABLE IF NOT EXISTS parallel_sessions ("
+        "  fg_app TEXT NOT NULL,"
+        "  bg_app TEXT NOT NULL,"
+        "  fg_context TEXT DEFAULT '',"
+        "  bg_context TEXT DEFAULT '',"
+        "  count INTEGER DEFAULT 0,"
+        "  total_minutes REAL DEFAULT 0,"
+        "  last_seen TEXT,"
+        "  PRIMARY KEY(fg_app, bg_app)"
+        ")");
+
+    ExecSql(
+        "CREATE TABLE IF NOT EXISTS hourly_activity ("
+        "  date TEXT NOT NULL,"
+        "  hour INTEGER NOT NULL,"
+        "  process_name TEXT NOT NULL,"
+        "  context TEXT DEFAULT '',"
+        "  fg_minutes REAL DEFAULT 0,"
+        "  bg_minutes REAL DEFAULT 0,"
+        "  PRIMARY KEY(date, hour, process_name)"
+        ")");
+
     return true;
 }
 
@@ -862,6 +885,118 @@ std::vector<AppLaunchRecord> LongTermMemory::GetAppLaunchRecords(int limit) cons
     return result;
 }
 
+void LongTermMemory::RecordParallelUsage(const std::string& foregroundApp, const std::string& backgroundApp,
+                                          const std::string& fgContext, const std::string& bgContext, float minutes) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!db_ || foregroundApp.empty() || backgroundApp.empty()) return;
+
+    std::string now = GetCurrentTimeString();
+    const char* sql =
+        "INSERT INTO parallel_sessions (fg_app, bg_app, fg_context, bg_context, count, total_minutes, last_seen) "
+        "VALUES(?1,?2,?3,?4,1,?5,?6) "
+        "ON CONFLICT(fg_app, bg_app) DO UPDATE SET "
+        "count = count + 1, total_minutes = total_minutes + ?5, last_seen = ?6, "
+        "fg_context = ?3, bg_context = ?4";
+
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_text(stmt, 1, foregroundApp.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 2, backgroundApp.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 3, fgContext.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 4, bgContext.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_double(stmt, 5, minutes);
+        sqlite3_bind_text(stmt, 6, now.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+    }
+}
+
+std::vector<ParallelHabit> LongTermMemory::GetParallelHabits(int limit) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<ParallelHabit> result;
+    if (!db_) return result;
+
+    std::string sql =
+        "SELECT fg_app, bg_app, fg_context, bg_context, count, total_minutes, last_seen "
+        "FROM parallel_sessions ORDER BY count DESC LIMIT " + std::to_string(limit);
+
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            ParallelHabit h;
+            h.foregroundApp = SafeText(sqlite3_column_text(stmt, 0));
+            h.backgroundApp = SafeText(sqlite3_column_text(stmt, 1));
+            h.foregroundContext = SafeText(sqlite3_column_text(stmt, 2));
+            h.backgroundContext = SafeText(sqlite3_column_text(stmt, 3));
+            h.count = sqlite3_column_int(stmt, 4);
+            h.totalMinutes = static_cast<float>(sqlite3_column_double(stmt, 5));
+            h.lastSeen = SafeText(sqlite3_column_text(stmt, 6));
+            result.push_back(std::move(h));
+        }
+        sqlite3_finalize(stmt);
+    }
+    return result;
+}
+
+void LongTermMemory::RecordHourlyActivity(const std::string& processName, const std::string& context,
+                                           int hour, float fgMinutes, float bgMinutes) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!db_ || processName.empty()) return;
+
+    std::string today = GetCurrentTimeString().substr(0, 10);
+    const char* sql =
+        "INSERT INTO hourly_activity (date, hour, process_name, context, fg_minutes, bg_minutes) "
+        "VALUES(?1,?2,?3,?4,?5,?6) "
+        "ON CONFLICT(date, hour, process_name) DO UPDATE SET "
+        "fg_minutes = fg_minutes + ?5, bg_minutes = bg_minutes + ?6, context = ?4";
+
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_text(stmt, 1, today.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int(stmt, 2, hour);
+        sqlite3_bind_text(stmt, 3, processName.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 4, context.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_double(stmt, 5, fgMinutes);
+        sqlite3_bind_double(stmt, 6, bgMinutes);
+        sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+    }
+}
+
+std::vector<HourlyPattern> LongTermMemory::GetHourlyPatterns() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<HourlyPattern> result;
+    if (!db_) return result;
+
+    const char* sql =
+        "SELECT hour, process_name, context, "
+        "SUM(fg_minutes) as total_fg, COUNT(DISTINCT date) as days "
+        "FROM hourly_activity "
+        "GROUP BY hour, process_name "
+        "ORDER BY hour ASC, total_fg DESC";
+
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return result;
+
+    int lastHour = -1;
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        int hour = sqlite3_column_int(stmt, 0);
+        if (hour == lastHour) continue;
+        lastHour = hour;
+
+        HourlyPattern p;
+        p.hour = hour;
+        p.topApp = SafeText(sqlite3_column_text(stmt, 1));
+        p.topContext = SafeText(sqlite3_column_text(stmt, 2));
+        p.avgFgMinutes = static_cast<float>(sqlite3_column_double(stmt, 3));
+        p.dayCount = sqlite3_column_int(stmt, 4);
+        if (p.dayCount > 0) p.avgFgMinutes /= p.dayCount;
+        result.push_back(std::move(p));
+    }
+    sqlite3_finalize(stmt);
+    return result;
+}
+
 void LongTermMemory::AddFact(const std::string& category, const std::string& content, float importance) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!db_) return;
@@ -925,6 +1060,81 @@ std::string LongTermMemory::BuildContextString() const {
     std::lock_guard<std::mutex> lock(mutex_);
 
     std::ostringstream ctx;
+
+    // 生活文脈: 現在の時刻と蓄積パターンから「今の状況」を推測
+    if (db_) {
+        auto sysNow = std::chrono::system_clock::now();
+        auto time = std::chrono::system_clock::to_time_t(sysNow);
+        struct tm tm_buf;
+        localtime_s(&tm_buf, &time);
+        int currentHour = tm_buf.tm_hour;
+
+        static const char* kDayNames[] = {
+            "\xe6\x97\xa5", "\xe6\x9c\x88", "\xe7\x81\xab", "\xe6\xb0\xb4",
+            "\xe6\x9c\xa8", "\xe9\x87\x91", "\xe5\x9c\x9f" // 日月火水木金土
+        };
+        ctx << "## \xe4\xbb\x8a\xe3\x81\xae\xe7\x8a\xb6\xe6\xb3\x81\n"; // 今の状況
+        ctx << "- " << kDayNames[tm_buf.tm_wday] << "\xe6\x9b\x9c "
+            << currentHour << ":" << (tm_buf.tm_min < 10 ? "0" : "") << tm_buf.tm_min << "\n";
+
+        // この時間帯の典型的なアクティビティ
+        sqlite3_stmt* stmt = nullptr;
+        const char* sql =
+            "SELECT context, SUM(fg_minutes) as total_fg, COUNT(DISTINCT date) as days "
+            "FROM hourly_activity WHERE hour = ?1 AND context != '' "
+            "GROUP BY context HAVING days >= 2 "
+            "ORDER BY total_fg DESC LIMIT 3";
+        if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+            sqlite3_bind_int(stmt, 1, currentHour);
+            bool hasTypical = false;
+            while (sqlite3_step(stmt) == SQLITE_ROW) {
+                if (!hasTypical) {
+                    // この時間帯はいつも:
+                    ctx << "- \xe3\x81\x93\xe3\x81\xae\xe6\x99\x82\xe9\x96\x93\xe5\xb8\xaf\xe3\x81\xaf\xe3\x81\x84\xe3\x81\xa4\xe3\x82\x82: ";
+                    hasTypical = true;
+                } else {
+                    ctx << ", ";
+                }
+                ctx << SafeText(sqlite3_column_text(stmt, 0));
+            }
+            if (hasTypical) ctx << "\n";
+            sqlite3_finalize(stmt);
+        }
+
+        // この時間帯のよくあるながら習慣
+        const char* parallelSql =
+            "SELECT p.fg_context, p.bg_context, p.count "
+            "FROM parallel_sessions p "
+            "INNER JOIN hourly_activity h ON h.process_name IN (p.fg_app, p.bg_app) "
+            "WHERE h.hour = ?1 AND p.count >= 3 "
+            "GROUP BY p.fg_context, p.bg_context "
+            "ORDER BY p.count DESC LIMIT 2";
+        if (sqlite3_prepare_v2(db_, parallelSql, -1, &stmt, nullptr) == SQLITE_OK) {
+            sqlite3_bind_int(stmt, 1, currentHour);
+            bool hasParallel = false;
+            while (sqlite3_step(stmt) == SQLITE_ROW) {
+                std::string fgCtx = SafeText(sqlite3_column_text(stmt, 0));
+                std::string bgCtx = SafeText(sqlite3_column_text(stmt, 1));
+                if (fgCtx.empty() && bgCtx.empty()) continue;
+                if (!hasParallel) {
+                    // よくある組み合わせ:
+                    ctx << "- \xe3\x82\x88\xe3\x81\x8f\xe3\x81\x82\xe3\x82\x8b\xe7\xb5\x84\xe3\x81\xbf\xe5\x90\x88\xe3\x82\x8f\xe3\x81\x9b: ";
+                    hasParallel = true;
+                } else {
+                    ctx << ", ";
+                }
+                if (!fgCtx.empty() && !bgCtx.empty()) {
+                    ctx << fgCtx << "+" << bgCtx;
+                } else {
+                    ctx << (fgCtx.empty() ? bgCtx : fgCtx);
+                }
+            }
+            if (hasParallel) ctx << "\n";
+            sqlite3_finalize(stmt);
+        }
+
+        ctx << "\n";
+    }
 
     if (!userProfile_.name.empty() || !userProfile_.interests.empty()) {
         ctx << "## \xe3\x83\xa6\xe3\x83\xbc\xe3\x82\xb6\xe3\x83\xbc\xe6\x83\x85\xe5\xa0\xb1\n";
@@ -1058,6 +1268,63 @@ std::string LongTermMemory::BuildContextString() const {
                 ctx << "- [" << SafeText(sqlite3_column_text(stmt, 0))
                     << "] " << SafeText(sqlite3_column_text(stmt, 1)) << "\n";
             }
+            sqlite3_finalize(stmt);
+        }
+    }
+
+    // Parallel habits (SQLite)
+    if (db_) {
+        sqlite3_stmt* stmt = nullptr;
+        if (sqlite3_prepare_v2(db_,
+                "SELECT fg_app, bg_app, fg_context, bg_context, count, total_minutes "
+                "FROM parallel_sessions WHERE count >= 3 ORDER BY count DESC LIMIT 8",
+                -1, &stmt, nullptr) == SQLITE_OK) {
+            bool hasData = false;
+            while (sqlite3_step(stmt) == SQLITE_ROW) {
+                if (!hasData) { ctx << "\n## ながら習慣\n"; hasData = true; }
+                std::string fg = SafeText(sqlite3_column_text(stmt, 0));
+                std::string bg = SafeText(sqlite3_column_text(stmt, 1));
+                std::string fgCtx = SafeText(sqlite3_column_text(stmt, 2));
+                std::string bgCtx = SafeText(sqlite3_column_text(stmt, 3));
+                int cnt = sqlite3_column_int(stmt, 4);
+                int min = static_cast<int>(sqlite3_column_double(stmt, 5));
+                ctx << "- " << fg;
+                if (!fgCtx.empty()) ctx << "(" << fgCtx << ")";
+                ctx << " + " << bg;
+                if (!bgCtx.empty()) ctx << "(" << bgCtx << ")";
+                ctx << " [" << cnt << "回, " << min << "分]\n";
+            }
+            if (hasData) ctx << "\n";
+            sqlite3_finalize(stmt);
+        }
+    }
+
+    // Hourly activity patterns (SQLite)
+    if (db_) {
+        sqlite3_stmt* stmt = nullptr;
+        const char* sql =
+            "SELECT hour, context, SUM(fg_minutes) as total_fg, COUNT(DISTINCT date) as days "
+            "FROM hourly_activity WHERE context != '' "
+            "GROUP BY hour, context "
+            "HAVING days >= 2 "
+            "ORDER BY hour ASC, total_fg DESC";
+        if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+            bool hasData = false;
+            int lastHour = -1;
+            while (sqlite3_step(stmt) == SQLITE_ROW) {
+                int hour = sqlite3_column_int(stmt, 0);
+                if (hour == lastHour) continue;
+                lastHour = hour;
+                if (!hasData) { ctx << "\n## 時間帯別パターン\n"; hasData = true; }
+                std::string context = SafeText(sqlite3_column_text(stmt, 1));
+                float totalFg = static_cast<float>(sqlite3_column_double(stmt, 2));
+                int days = sqlite3_column_int(stmt, 3);
+                float avg = (days > 0) ? totalFg / days : 0.0f;
+                ctx << "- " << hour << ":00〜" << hour + 1 << ":00: "
+                    << context << " (平均" << static_cast<int>(avg) << "分/日, "
+                    << days << "日観測)\n";
+            }
+            if (hasData) ctx << "\n";
             sqlite3_finalize(stmt);
         }
     }

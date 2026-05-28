@@ -1,0 +1,47 @@
+{
+  "version": 3,
+
+  "entity_types": {
+    "person":       ["artist", "developer", "streamer", "character"],
+    "organization": ["team", "company", "community"],
+    "work":         ["game", "song", "album", "anime", "film", "manga", "video", "article"],
+    "concept":      ["language", "framework", "algorithm", "theory"],
+    "system":       ["tool", "platform", "engine", "device"],
+    "action":       ["technique", "sport"],
+    "space":        ["venue", "region"],
+    "media":        ["channel", "playlist"]
+  },
+
+  "domains": {
+    "gaming":       ["fps", "moba", "rpg", "sandbox", "fighting", "rhythm"],
+    "music":        ["jpop", "rock", "electronic", "hiphop", "vocaloid", "soundtrack"],
+    "visual_media": ["anime", "film", "drama", "youtube", "streaming"],
+    "narrative":    ["manga", "novel"],
+    "engineering":  ["software", "graphics", "ai_ml", "gamedev", "web"],
+    "design":       ["graphic", "ui_ux"],
+    "academic":     ["cs", "math", "physics"],
+    "lifestyle":    ["cooking", "fitness", "travel"]
+  },
+
+  "relation_types": [
+    "created_by",
+    "member_of",
+    "part_of",
+    "similar_to",
+    "belongs_to",
+    "used_in"
+  ],
+
+  "event_types": [
+    "viewed",
+    "searched",
+    "listened",
+    "played",
+    "used",
+    "discussed"
+  ],
+
+  "depth_levels": ["glance", "browse", "engage", "create"],
+
+  "session_idle_timeout_sec": 900
+}

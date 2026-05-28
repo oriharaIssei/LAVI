@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+class InterestGraph;
 class LocalLLM;
 class ConversationMemory;
 class LongTermMemory;
@@ -42,6 +43,7 @@ private:
     std::unique_ptr<BrowsingHistoryCollector> browsingCollector_;
     std::unique_ptr<UserIdentifier> userIdentifier_;
     std::unique_ptr<AppUsageTracker> appTracker_;
+    std::unique_ptr<InterestGraph> interestGraph_;
 
     std::string localModelPath_;
     std::string arcfaceModelPath_;
@@ -76,4 +78,7 @@ private:
 
     // 文脈ベース記憶検索
     std::string lastUserMessage_;
+
+    // 既存データ → InterestGraph マイグレーション
+    void MigrateToInterestGraph();
 };

@@ -12,7 +12,7 @@
 #include "MemoryPanel.h"
 #include "SentenceEmbedding.h"
 #include "WebAction.h"
-#include "ActionPipeline.h"
+#include "system/action/ActionPipeline.h"
 
 #include "imgui/imgui.h"
 

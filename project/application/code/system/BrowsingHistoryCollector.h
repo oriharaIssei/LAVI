@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <vector>
 
+class InterestGraph;
 class LocalLLM;
 class LongTermMemory;
 
@@ -38,6 +39,8 @@ public:
     BrowsingHistoryCollector();
     ~BrowsingHistoryCollector();
 
+    void SetInterestGraph(InterestGraph* ig) { ig_ = ig; }
+
     void LoadCategories(const std::string& tagAxesPath);
     const std::vector<std::string>& GetCategories() const { return categories_; }
     bool IsValidCategory(const std::string& cat) const;
@@ -68,6 +71,9 @@ private:
     using ServiceGroup = std::unordered_map<std::string, std::vector<BrowsingEntry>>;
     ServiceGroup GroupByService(const std::vector<BrowsingEntry>& entries) const;
 
+    static std::string CategoryToSourceHint(const std::string& category);
+
+    InterestGraph* ig_ = nullptr;
     mutable std::mutex mutex_;
     bool isCollecting_ = false;
     std::string lastError_;

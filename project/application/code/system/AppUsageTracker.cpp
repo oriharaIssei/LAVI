@@ -1,4 +1,5 @@
 #include "AppUsageTracker.h"
+#include "InterestGraph.h"
 #include "LocalLLM.h"
 #include "LongTermMemory.h"
 
@@ -9,6 +10,7 @@
 #include "util/StringUtil.h"
 
 #include <algorithm>
+#include <ctime>
 #include <sstream>
 
 namespace {
@@ -91,9 +93,11 @@ bool ShouldIgnore(const std::string& processName) {
 AppUsageTracker::AppUsageTracker() = default;
 AppUsageTracker::~AppUsageTracker() = default;
 
-void AppUsageTracker::Initialize(LongTermMemory* ltm, LocalLLM* llm, const std::string& apiKey) {
+void AppUsageTracker::Initialize(LongTermMemory* ltm, LocalLLM* llm, const std::string& apiKey,
+                                 InterestGraph* ig) {
     ltm_ = ltm;
     llm_ = llm;
+    ig_ = ig;
 
     if (!apiKey.empty()) {
         cloudLlm_.SetApiKey(apiKey);
@@ -116,6 +120,12 @@ void AppUsageTracker::Update(float deltaTime) {
     if (scanTimer_ >= scanInterval_) {
         scanTimer_ = 0.0f;
         ScanProcesses();
+    }
+
+    parallelScanTimer_ += deltaTime;
+    if (parallelScanTimer_ >= parallelScanInterval_) {
+        parallelScanTimer_ = 0.0f;
+        DetectParallelUsage();
     }
 }
 
@@ -484,4 +494,103 @@ std::vector<AppUsageTracker::ActiveAppInfo> AppUsageTracker::GetActiveApps() con
             return a.sessionMinutes > b.sessionMinutes;
         });
     return result;
+}
+
+std::string AppUsageTracker::ClassifyContext(const std::string& processName, const std::string& windowTitle) {
+    if (IsBrowser(processName)) {
+        std::string service = ExtractServiceName(windowTitle);
+        if (!service.empty()) return service;
+        return "Web";
+    }
+    static const std::unordered_map<std::string, std::string> kContextMap = {
+        {"devenv.exe", "IDE"},
+        {"Code.exe", "IDE"},
+        {"rider64.exe", "IDE"},
+        {"clion64.exe", "IDE"},
+        {"WindowsTerminal.exe", "Terminal"},
+        {"cmd.exe", "Terminal"},
+        {"powershell.exe", "Terminal"},
+        {"blender.exe", "3DCG"},
+        {"photoshop.exe", "Design"},
+        {"clip_studio_paint.exe", "Drawing"},
+        {"Discord.exe", "Chat"},
+        {"vesktop.exe", "Chat"},
+        {"slack.exe", "Chat"},
+        {"Spotify.exe", "Music"},
+        {"steam.exe", "Game"},
+        {"steamwebhelper.exe", "Game"},
+    };
+    auto it = kContextMap.find(processName);
+    if (it != kContextMap.end()) return it->second;
+    return "";
+}
+
+void AppUsageTracker::DetectParallelUsage() {
+    if (currentForeground_.empty()) return;
+
+    auto now = std::chrono::steady_clock::now();
+
+    std::string fgTitle;
+    auto fgIt = runningApps_.find(currentForeground_);
+    if (fgIt != runningApps_.end()) {
+        fgTitle = fgIt->second.windowTitle;
+    }
+
+    std::string fgContext = ClassifyContext(currentForeground_, fgTitle);
+
+    // Record hourly activity
+    auto sysNow = std::chrono::system_clock::now();
+    auto time = std::chrono::system_clock::to_time_t(sysNow);
+    struct tm tm_buf;
+    localtime_s(&tm_buf, &time);
+    int currentHour = tm_buf.tm_hour;
+
+    float intervalMin = parallelScanInterval_ / 60.0f;
+    int intervalSec = static_cast<int>(parallelScanInterval_);
+    ltm_->RecordHourlyActivity(currentForeground_, fgContext, currentHour, intervalMin, 0.0f);
+
+    // InterestGraph: record foreground app as entity event
+    if (ig_) {
+        std::string sourceHint = "app_usage";
+        if (fgContext == "Game") sourceHint = "app_usage_game";
+        std::string fgEntityId = ig_->ResolveEntity(currentForeground_, sourceHint);
+        if (!fgEntityId.empty()) {
+            ig_->RecordEvent(fgEntityId, "used", intervalSec, "engage", sourceHint);
+        }
+        // Web service gets separate entity
+        if (IsBrowser(currentForeground_) && !currentWebService_.empty()) {
+            std::string wsSource = "browser";
+            std::string wsEntityId = ig_->ResolveEntity(currentWebService_, wsSource);
+            if (!wsEntityId.empty()) {
+                ig_->RecordEvent(wsEntityId, "viewed", intervalSec, "browse", wsSource);
+            }
+        }
+    }
+
+    for (auto& [name, app] : runningApps_) {
+        if (name == currentForeground_) continue;
+        if (ShouldIgnore(name)) continue;
+
+        float sessionMin = std::chrono::duration<float>(now - app.openTime).count() / 60.0f;
+        if (sessionMin < 1.0f) continue;
+
+        std::string bgContext = ClassifyContext(name, app.windowTitle);
+
+        ltm_->RecordHourlyActivity(name, bgContext, currentHour, 0.0f, intervalMin);
+
+        // InterestGraph: record background app
+        if (ig_) {
+            std::string bgSource = "app_usage";
+            if (bgContext == "Game") bgSource = "app_usage_game";
+            else if (bgContext == "Music") bgSource = "browser_music";
+            std::string bgEntityId = ig_->ResolveEntity(name, bgSource);
+            if (!bgEntityId.empty()) {
+                ig_->RecordEvent(bgEntityId, "used", intervalSec, "glance", bgSource);
+            }
+        }
+
+        if (fgContext == bgContext && !fgContext.empty()) continue;
+
+        ltm_->RecordParallelUsage(currentForeground_, name, fgContext, bgContext, intervalMin);
+    }
 }

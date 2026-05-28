@@ -67,6 +67,24 @@ struct AppTransition {
     std::string lastTime;
 };
 
+struct ParallelHabit {
+    std::string foregroundApp;
+    std::string backgroundApp;
+    std::string foregroundContext;
+    std::string backgroundContext;
+    int count = 0;
+    float totalMinutes = 0.0f;
+    std::string lastSeen;
+};
+
+struct HourlyPattern {
+    int hour = 0;
+    std::string topApp;
+    std::string topContext;
+    float avgFgMinutes = 0.0f;
+    int dayCount = 0;
+};
+
 struct MemoryFact {
     std::string category;
     std::string content;
@@ -107,6 +125,14 @@ public:
     void RecordAppLaunch(const std::string& launchedApp, const std::string& launchedFrom);
     std::vector<AppLaunchRecord> GetAppLaunchRecords(int limit = 0) const;
 
+    void RecordParallelUsage(const std::string& foregroundApp, const std::string& backgroundApp,
+                             const std::string& fgContext, const std::string& bgContext, float minutes);
+    std::vector<ParallelHabit> GetParallelHabits(int limit = 20) const;
+
+    void RecordHourlyActivity(const std::string& processName, const std::string& context,
+                              int hour, float fgMinutes, float bgMinutes);
+    std::vector<HourlyPattern> GetHourlyPatterns() const;
+
     void AddFact(const std::string& category, const std::string& content, float importance = 1.0f);
     std::vector<MemoryFact> GetFacts(const std::string& category = "") const;
     int GetFactCount() const;
@@ -127,6 +153,10 @@ private:
                          float fgMinutes, float bgMinutes, bool isForeground);
     void ExecSql(const char* sql) const;
 
+public:
+    sqlite3* GetDb() const { return db_; }
+
+private:
     mutable std::mutex mutex_;
     std::string storagePath_;
     sqlite3* db_ = nullptr;

@@ -9,6 +9,7 @@
 
 #include "LLMClient.h"
 
+class InterestGraph;
 class LocalLLM;
 class LongTermMemory;
 
@@ -17,7 +18,8 @@ public:
     AppUsageTracker();
     ~AppUsageTracker();
 
-    void Initialize(LongTermMemory* ltm, LocalLLM* llm, const std::string& apiKey);
+    void Initialize(LongTermMemory* ltm, LocalLLM* llm, const std::string& apiKey,
+                    InterestGraph* ig = nullptr);
     void Update(float deltaTime);
     void Finalize();
 
@@ -67,6 +69,7 @@ private:
 
     LongTermMemory* ltm_ = nullptr;
     LocalLLM* llm_ = nullptr;
+    InterestGraph* ig_ = nullptr;
 
     float scanInterval_ = 3.0f;
     float scanTimer_ = 0.0f;
@@ -77,6 +80,19 @@ private:
 
     std::string currentWebService_;
     std::chrono::steady_clock::time_point webServiceStart_;
+
+    // Parallel session detection
+    float parallelScanInterval_ = 60.0f;
+    float parallelScanTimer_ = 0.0f;
+    struct ParallelSnapshot {
+        std::string foregroundApp;
+        std::string foregroundTitle;
+        std::vector<std::pair<std::string, std::string>> backgroundApps;
+        std::chrono::steady_clock::time_point timestamp;
+    };
+    ParallelSnapshot lastSnapshot_;
+    void DetectParallelUsage();
+    static std::string ClassifyContext(const std::string& processName, const std::string& windowTitle);
 
     // Hybrid tagging
     TagStage tagStage_ = TagStage::None;

@@ -3,7 +3,7 @@
 #include "EmotionTag.h"
 #include "WebAction.h"
 #include "LongTermMemory.h"
-#include "ActionPipeline.h"
+#include "system/action/ActionPipeline.h"
 
 #define ENGINE_INCLUDE
 #define ENGINE_MEDIA_CAPTURE

@@ -1,4 +1,5 @@
 #include "MemoryPanel.h"
+#include "InterestGraph.h"
 #include "LocalLLM.h"
 #include "ConversationMemory.h"
 #include "LongTermMemory.h"
@@ -12,6 +13,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <sstream>
 
 MemoryPanel::MemoryPanel() = default;
@@ -46,7 +48,16 @@ void MemoryPanel::Initialize(SharedMediaContext* ctx, GatekeeperManager* gkManag
 
     userIdentifier_->Load("application/resource/memory");
 
-    appTracker_->Initialize(longTermMemory_.get(), localLLM_.get(), ctx_->config.apiKey);
+    interestGraph_ = std::make_unique<InterestGraph>();
+    interestGraph_->Initialize(longTermMemory_->GetDb(),
+                               "application/resource/memory/taxonomy.json");
+
+    browsingCollector_->SetInterestGraph(interestGraph_.get());
+
+    MigrateToInterestGraph();
+
+    appTracker_->Initialize(longTermMemory_.get(), localLLM_.get(), ctx_->config.apiKey,
+                            interestGraph_.get());
 }
 
 void MemoryPanel::Finalize() {
@@ -65,7 +76,12 @@ void MemoryPanel::Finalize() {
     longTermMemory_->Save();
 
     userIdentifier_->Save("application/resource/memory");
+    if (interestGraph_) {
+        int sid = interestGraph_->GetActiveSessionId();
+        if (sid >= 0) interestGraph_->EndSession(sid);
+    }
     appTracker_.reset();
+    interestGraph_.reset();
     userIdentifier_.reset();
     browsingCollector_.reset();
     conversationMemory_.reset();
@@ -364,6 +380,53 @@ void MemoryPanel::Draw() {
             }
         }
 
+        // Parallel habits
+        auto habits = longTermMemory_->GetParallelHabits(8);
+        if (!habits.empty()) {
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "Parallel Habits (top %d):",
+                static_cast<int>(habits.size()));
+            for (auto& h : habits) {
+                std::string label = h.foregroundApp;
+                if (!h.foregroundContext.empty()) label += "(" + h.foregroundContext + ")";
+                label += " + " + h.backgroundApp;
+                if (!h.backgroundContext.empty()) label += "(" + h.backgroundContext + ")";
+                ImGui::BulletText("%s [%dx, %dmin]", label.c_str(), h.count,
+                    static_cast<int>(h.totalMinutes));
+            }
+        }
+
+        // Hourly patterns
+        auto patterns = longTermMemory_->GetHourlyPatterns();
+        if (!patterns.empty()) {
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.5f, 1.0f), "Hourly Patterns:");
+            for (auto& p : patterns) {
+                if (p.topContext.empty()) continue;
+                ImGui::BulletText("%02d:00  %s (avg %.0fmin, %d days)",
+                    p.hour, p.topContext.c_str(), p.avgFgMinutes, p.dayCount);
+            }
+        }
+
+        // Interest Graph (Entity Knowledge System)
+        if (interestGraph_) {
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.7f, 1.0f), "Interest Graph:");
+            ImGui::Text("Entities: %d  Events: %d  Session: %s",
+                interestGraph_->GetEntityCount(),
+                interestGraph_->GetEventCount(),
+                interestGraph_->GetActiveSessionId() >= 0 ? "active" : "idle");
+
+            auto topEntities = interestGraph_->GetTopEntities(10);
+            if (!topEntities.empty()) {
+                ImGui::Text("Top Entities:");
+                for (auto& e : topEntities) {
+                    ImGui::BulletText("%s [%s] (%d events)",
+                        e.canonicalName.c_str(), e.entityType.c_str(), e.eventCount);
+                }
+            }
+        }
+
         ImGui::Separator();
         ImGui::Text("Interests:");
         auto& interests = longTermMemory_->GetUserProfile().interests;
@@ -604,6 +667,27 @@ std::string MemoryPanel::BuildMemoryContext() const {
         context += ltmContext;
     }
 
+    // InterestGraph context
+    if (interestGraph_ && interestGraph_->GetEntityCount() > 0) {
+        auto recentEvents = interestGraph_->GetRecentEventSummary(7);
+        if (!recentEvents.empty()) {
+            context += "\n## 最近よく関わっているもの (7日間)\n";
+            for (auto& ev : recentEvents) {
+                int hours = ev.totalDurationSec / 3600;
+                int mins = (ev.totalDurationSec % 3600) / 60;
+                if (hours > 0) {
+                    context += "- " + ev.entityName + " (" + ev.eventType + " " +
+                        std::to_string(ev.count) + "回, " +
+                        std::to_string(hours) + "h" + std::to_string(mins) + "m)\n";
+                } else {
+                    context += "- " + ev.entityName + " (" + ev.eventType + " " +
+                        std::to_string(ev.count) + "回, " +
+                        std::to_string(mins) + "min)\n";
+                }
+            }
+        }
+    }
+
     auto& faces = userIdentifier_->FaceProfiles();
     auto& voices = userIdentifier_->VoiceProfiles();
     if (!faces.empty() || !voices.empty()) {
@@ -626,22 +710,29 @@ void MemoryPanel::NotifyUserMessage(const std::string& message) {
 
 std::string MemoryPanel::BuildFactExtractionPrompt(const std::vector<std::string>& recentMessages) {
     std::ostringstream prompt;
-    prompt << "以下の会話から、長期的に覚えておくべき重要な事実を抽出してください。\n"
-           << "ユーザーの好み、決定事項、個人情報、習慣、目標、悩みなどを探してください。\n\n"
+    prompt << "以下の会話から2種類の情報を抽出してください。\n\n"
            << "【会話内容】\n";
     for (auto& msg : recentMessages) {
         prompt << msg << "\n";
     }
-    prompt << "\n【ルール】\n"
-           << "- 各事実を1行ずつ「カテゴリ|内容」の形式で出力\n"
-           << "- カテゴリ: 好み, 決定, 個人情報, 習慣, 目標, 悩み, スキル, 関係, その他\n"
+    prompt << "\n【1. 事実抽出】\n"
+           << "ユーザーの好み、決定事項、個人情報、習慣、目標、悩みなどを探す。\n"
+           << "形式: カテゴリ|内容\n"
+           << "カテゴリ: 好み, 決定, 個人情報, 習慣, 目標, 悩み, スキル, 関係, その他\n\n"
+           << "【2. 固有名詞抽出】\n"
+           << "会話に登場した作品名・人名・サービス名・技術名などの固有名詞を抽出する。\n"
+           << "形式: entity|名前|分野\n"
+           << "分野: 音楽, ゲーム, アニメ, 動画, プログラミング, 技術, 人物, サービス, その他\n\n"
+           << "【ルール】\n"
            << "- 重要でない雑談は無視\n"
-           << "- 事実がなければ「なし」とだけ回答\n"
+           << "- 何もなければ「なし」とだけ回答\n"
            << "- 余計な説明は不要\n\n"
            << "【出力例】\n"
            << "好み|コーヒーよりお茶が好き\n"
-           << "目標|来月までにポートフォリオを完成させたい\n"
-           << "スキル|C++とPythonが得意\n\n"
+           << "スキル|C++とPythonが得意\n"
+           << "entity|YOASOBI|音楽\n"
+           << "entity|VALORANT|ゲーム\n"
+           << "entity|React|プログラミング\n\n"
            << "出力:";
     return prompt.str();
 }
@@ -675,6 +766,25 @@ void MemoryPanel::PollFactExtraction() {
 
     if (result.find("\xe3\x81\xaa\xe3\x81\x97") != std::string::npos && result.size() < 20) return;
 
+    auto trim = [](std::string& s) {
+        auto start = s.find_first_not_of(" \t\r\n");
+        auto end = s.find_last_not_of(" \t\r\n");
+        if (start == std::string::npos) { s.clear(); return; }
+        s = s.substr(start, end - start + 1);
+    };
+
+    auto domainToSourceHint = [](const std::string& domain) -> std::string {
+        if (domain == "\xe9\x9f\xb3\xe6\xa5\xbd") return "conversation_music";
+        if (domain == "\xe3\x82\xb2\xe3\x83\xbc\xe3\x83\xa0") return "conversation_game";
+        if (domain == "\xe3\x82\xa2\xe3\x83\x8b\xe3\x83\xa1") return "conversation_anime";
+        if (domain == "\xe5\x8b\x95\xe7\x94\xbb") return "conversation_video";
+        if (domain == "\xe3\x83\x97\xe3\x83\xad\xe3\x82\xb0\xe3\x83\xa9\xe3\x83\x9f\xe3\x83\xb3\xe3\x82\xb0") return "conversation_programming";
+        if (domain == "\xe6\x8a\x80\xe8\xa1\x93") return "conversation_tech";
+        if (domain == "\xe4\xba\xba\xe7\x89\xa9") return "conversation_person";
+        if (domain == "\xe3\x82\xb5\xe3\x83\xbc\xe3\x83\x93\xe3\x82\xb9") return "conversation_service";
+        return "conversation";
+    };
+
     std::istringstream ss(result);
     std::string line;
     while (std::getline(ss, line)) {
@@ -683,18 +793,104 @@ void MemoryPanel::PollFactExtraction() {
 
         std::string category = line.substr(0, sep);
         std::string content = line.substr(sep + 1);
-
-        auto trim = [](std::string& s) {
-            auto start = s.find_first_not_of(" \t\r\n");
-            auto end = s.find_last_not_of(" \t\r\n");
-            if (start == std::string::npos) { s.clear(); return; }
-            s = s.substr(start, end - start + 1);
-        };
         trim(category);
         trim(content);
+
+        if (category == "entity") {
+            auto sep2 = content.find('|');
+            std::string entityName = (sep2 != std::string::npos) ? content.substr(0, sep2) : content;
+            std::string domain = (sep2 != std::string::npos) ? content.substr(sep2 + 1) : "";
+            trim(entityName);
+            trim(domain);
+
+            if (!entityName.empty() && entityName.size() < 100 && interestGraph_) {
+                std::string sourceHint = domainToSourceHint(domain);
+                std::string eid = interestGraph_->ResolveEntity(entityName, sourceHint);
+                if (!eid.empty()) {
+                    interestGraph_->RecordEvent(eid, "discussed", 0, "engage", sourceHint);
+                }
+            }
+            continue;
+        }
 
         if (!category.empty() && !content.empty() && content.size() < 200) {
             longTermMemory_->AddFact(category, content, 1.5f);
         }
     }
+}
+
+void MemoryPanel::MigrateToInterestGraph() {
+    if (!interestGraph_ || !longTermMemory_) return;
+
+    std::string markerPath = "application/resource/memory/ig_migration_done";
+    if (std::filesystem::exists(markerPath)) return;
+
+    auto categoryToSource = [](const std::string& cat) -> std::string {
+        if (cat == "\xe9\x9f\xb3\xe6\xa5\xbd") return "browser_history_music";
+        if (cat == "\xe3\x82\xb2\xe3\x83\xbc\xe3\x83\xa0") return "browser_history_game";
+        if (cat == "\xe3\x82\xa2\xe3\x83\x8b\xe3\x83\xa1") return "browser_history_anime";
+        if (cat == "\xe6\xbc\xab\xe7\x94\xbb") return "browser_history_manga";
+        if (cat == "\xe5\x8b\x95\xe7\x94\xbb") return "browser_history_video";
+        if (cat == "\xe3\x83\x97\xe3\x83\xad\xe3\x82\xb0\xe3\x83\xa9\xe3\x83\x9f\xe3\x83\xb3\xe3\x82\xb0") return "browser_history_programming";
+        if (cat == "\xe6\x8a\x80\xe8\xa1\x93") return "browser_history_tech";
+        if (cat == "\xe3\x82\xb9\xe3\x83\x9d\xe3\x83\xbc\xe3\x83\x84") return "browser_history_sports";
+        return "browser_history";
+    };
+
+    auto isNoiseKw = [](const std::string& kw) -> bool {
+        if (kw.empty() || kw.size() < 2) return true;
+        if (kw == "\xe3\x81\xaa\xe3\x81\x97") return true; // なし
+        if (kw.size() > 40) return true;
+        if (kw.find('%') != std::string::npos) return true;
+        if (kw.find(' ') != std::string::npos && kw.size() > 20) return true;
+        return false;
+    };
+
+    // 1. user_profile.json interests → entities + viewed events
+    auto& interests = longTermMemory_->GetUserProfile().interests;
+    for (auto& [category, entries] : interests) {
+        std::string source = categoryToSource(category);
+        for (auto& entry : entries) {
+            if (isNoiseKw(entry.keyword)) continue;
+            std::string eid = interestGraph_->ResolveEntity(entry.keyword, source);
+            if (!eid.empty()) {
+                for (int i = 0; i < entry.score; ++i) {
+                    interestGraph_->RecordEvent(eid, "viewed", 0, "browse", source);
+                }
+            }
+        }
+    }
+
+    // 2. app_usage.json → entities + used events
+    for (auto& app : longTermMemory_->GetAppUsageRecords()) {
+        std::string source = "app_usage";
+        for (auto& tag : app.tags) {
+            if (tag == "\xe5\xa8\xaf\xe6\xa5\xbd" || tag == "\xe3\x82\xb2\xe3\x83\xbc\xe3\x83\xa0") { // 娯楽 or ゲーム
+                source = "app_usage_game";
+                break;
+            }
+        }
+        std::string eid = interestGraph_->ResolveEntity(app.processName, source);
+        if (!eid.empty()) {
+            int totalSec = static_cast<int>((app.totalForegroundMinutes + app.totalBackgroundMinutes) * 60.0f);
+            if (totalSec > 0) {
+                interestGraph_->RecordEvent(eid, "used", totalSec, "engage", source);
+            }
+        }
+    }
+
+    // 3. web_services.json → entities + viewed events
+    for (auto& ws : longTermMemory_->GetWebServiceRecords()) {
+        std::string eid = interestGraph_->ResolveEntity(ws.serviceName, "browser_service");
+        if (!eid.empty()) {
+            int totalSec = static_cast<int>(ws.totalMinutes * 60.0f);
+            if (totalSec > 0) {
+                interestGraph_->RecordEvent(eid, "viewed", totalSec, "browse", "browser_service");
+            }
+        }
+    }
+
+    // マイグレーション完了マーカー
+    std::ofstream marker(markerPath);
+    marker << "migrated";
 }

@@ -1,5 +1,5 @@
 #include "MemoryResolver.h"
-#include "LongTermMemory.h"
+#include "system/LongTermMemory.h"
 
 UserPreference MemoryResolver::ResolvePreferences(LongTermMemory* memory) const {
     UserPreference pref;
