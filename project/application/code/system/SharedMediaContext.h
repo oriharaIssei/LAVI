@@ -39,4 +39,11 @@ struct SharedMediaContext {
     std::string identifiedUserName;
     float identifiedSimilarity = 0.0f;
     bool userIdentified = false;
+
+    // ホットキー / ウェイクワード
+    bool hotkeyEnabled = true;
+    int hotkeyModifiers = 0x0006; // MOD_CONTROL | MOD_SHIFT
+    int hotkeyVk = 'L';
+    std::string wakeWord = "LAVI";
+    bool wakeWordEnabled = true;
 };

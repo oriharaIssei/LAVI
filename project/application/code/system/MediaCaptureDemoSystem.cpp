@@ -14,6 +14,8 @@
 #include "WebAction.h"
 #include "system/action/ActionPipeline.h"
 
+#include "Engine.h"
+
 #include "imgui/imgui.h"
 
 #include <filesystem>
@@ -56,6 +58,14 @@ void MediaCaptureDemoSystem::Initialize() {
     llmPanel_->SetActionPipeline(actionPipeline_.get());
     gkManager_->SetActionPipeline(actionPipeline_.get());
 
+    // ホットキー登録
+    if (ctx_->hotkeyEnabled) {
+        HWND hwnd = OriGine::Engine::GetInstance()->GetWinApp()->GetHwnd();
+        if (::RegisterHotKey(hwnd, 1, ctx_->hotkeyModifiers, ctx_->hotkeyVk)) {
+            hotkeyRegistered_ = true;
+        }
+    }
+
     // Sentence Embedding (存在すれば読み込み)
     const std::filesystem::path embDir = "application/resource/embedding";
     const std::filesystem::path modelPath = embDir / "model.onnx";
@@ -72,6 +82,12 @@ void MediaCaptureDemoSystem::Initialize() {
 }
 
 void MediaCaptureDemoSystem::Finalize() {
+    if (hotkeyRegistered_) {
+        HWND hwnd = OriGine::Engine::GetInstance()->GetWinApp()->GetHwnd();
+        ::UnregisterHotKey(hwnd, 1);
+        hotkeyRegistered_ = false;
+    }
+
     memoryPanel_->Finalize();
     gkPanel_->Finalize();
     llmPanel_->Finalize();
@@ -98,6 +114,24 @@ void MediaCaptureDemoSystem::Update() {
         ctx_->speakFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
         ctx_->speakFuture.get();
         ctx_->isSpeaking = false;
+    }
+
+    // ウェイクワード検出
+    if (ctx_->wakeWordEnabled && !ctx_->wakeWord.empty() &&
+        !ctx_->transcribedText.empty() && ctx_->transcribedText != lastWakeWordText_) {
+        std::string newPart;
+        if (lastWakeWordText_.empty() || ctx_->transcribedText.size() <= lastWakeWordText_.size()) {
+            newPart = ctx_->transcribedText;
+        } else {
+            newPart = ctx_->transcribedText.substr(lastWakeWordText_.size());
+        }
+        lastWakeWordText_ = ctx_->transcribedText;
+
+        if (newPart.find(ctx_->wakeWord) != std::string::npos) {
+            HWND hwnd = OriGine::Engine::GetInstance()->GetWinApp()->GetHwnd();
+            ::ShowWindow(hwnd, SW_RESTORE);
+            ::SetForegroundWindow(hwnd);
+        }
     }
 
     // ゲートキーパーは UI のタブ選択に関係なく毎フレーム評価する

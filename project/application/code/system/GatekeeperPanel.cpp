@@ -9,6 +9,7 @@
 #include "imgui/imgui.h"
 #include "util/StringUtil.h"
 
+#include <cstring>
 #include <vector>
 
 namespace {
@@ -30,6 +31,14 @@ void GatekeeperPanel::Initialize(SharedMediaContext* ctx, GatekeeperManager* mgr
     PushCameraParams();
     PushScreenParams();
     ApplyKeywords();
+
+    // ウェイクワードバッファ初期化
+    std::strncpy(wakeWordBuf_, ctx_->wakeWord.c_str(), sizeof(wakeWordBuf_) - 1);
+    hotkeyKeyBuf_[0] = static_cast<char>(ctx_->hotkeyVk);
+    hotkeyKeyBuf_[1] = '\0';
+    if (ctx_->hotkeyModifiers == (0x0002 | 0x0004)) hotkeyModSel_ = 0;      // Ctrl+Shift
+    else if (ctx_->hotkeyModifiers == (0x0002 | 0x0001)) hotkeyModSel_ = 1;  // Ctrl+Alt
+    else if (ctx_->hotkeyModifiers == (0x0001 | 0x0004)) hotkeyModSel_ = 2;  // Alt+Shift
 }
 
 void GatekeeperPanel::Finalize() {
@@ -180,6 +189,26 @@ void GatekeeperPanel::Draw() {
         if (ImGui::Checkbox("Case sensitive (ASCII)", &caseSensitive_)) ApplyKeywords();
         ImGui::TextWrapped("Transcript: %s",
                            ctx_->transcribedText.empty() ? "(none)" : ctx_->transcribedText.c_str());
+    }
+
+    // ===== Hotkey / Wake Word =====
+    if (ImGui::CollapsingHeader("Hotkey / Wake Word")) {
+        ImGui::Checkbox("Hotkey enabled", &ctx_->hotkeyEnabled);
+        if (ctx_->hotkeyEnabled) {
+            const char* modItems[] = {"Ctrl+Shift", "Ctrl+Alt", "Alt+Shift"};
+            ImGui::Combo("Modifiers", &hotkeyModSel_, modItems, 3);
+            ImGui::InputText("Key", hotkeyKeyBuf_, sizeof(hotkeyKeyBuf_));
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
+                "Current: %s+%c", modItems[hotkeyModSel_], hotkeyKeyBuf_[0]);
+        }
+
+        ImGui::Separator();
+        ImGui::Checkbox("Wake word enabled", &ctx_->wakeWordEnabled);
+        if (ctx_->wakeWordEnabled) {
+            if (ImGui::InputText("Wake word", wakeWordBuf_, sizeof(wakeWordBuf_))) {
+                ctx_->wakeWord = wakeWordBuf_;
+            }
+        }
     }
 
     // ===== Event feed =====

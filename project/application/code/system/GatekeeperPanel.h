@@ -46,4 +46,9 @@ private:
     // --- Mic UI 状態 ---
     std::string keywordText_ = "ねえ\nLAVI\n教えて";
     bool caseSensitive_ = false;
+
+    // --- ホットキー / ウェイクワード UI 状態 ---
+    char wakeWordBuf_[64] = {};
+    int hotkeyModSel_ = 0; // 0=Ctrl+Shift, 1=Ctrl+Alt, 2=Alt+Shift
+    char hotkeyKeyBuf_[4] = {};
 };

@@ -43,4 +43,7 @@ private:
     std::unique_ptr<MemoryPanel> memoryPanel_;
     std::unique_ptr<SentenceEmbedding> embedding_;
     std::unique_ptr<ActionPipeline> actionPipeline_;
+
+    bool hotkeyRegistered_ = false;
+    std::string lastWakeWordText_;
 };
