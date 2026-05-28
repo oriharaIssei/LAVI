@@ -9,6 +9,8 @@
 #include "SentenceEmbedding.h"
 #include "system/action/ActionPipeline.h"
 
+#include "globalVariables/GlobalVariables.h"
+
 #define ENGINE_INCLUDE
 #define ENGINE_MEDIA_CAPTURE
 #define ENGINE_PROCESS_MANAGER
@@ -20,13 +22,28 @@ void LLMChatPanel::Initialize(SharedMediaContext* ctx) {
     ctx_ = ctx;
     llmClient_ = std::make_unique<LLMClient>();
     llmAutoObserveLastTime_ = std::chrono::steady_clock::now();
+    LoadPanelState();
 }
 
 void LLMChatPanel::SetMemoryPanel(MemoryPanel* memPanel) {
     memoryPanel_ = memPanel;
+
+    if (memPanel && llmClient_) {
+        auto* convMem = memPanel->GetConversationMemory();
+        if (convMem) {
+            auto& entries = convMem->GetRecentEntries();
+            for (auto& e : entries) {
+                if (!e.hasImage) {
+                    llmClient_->AddMessage(e.role, e.content);
+                }
+            }
+        }
+    }
 }
 
 void LLMChatPanel::Finalize() {
+    SavePanelState();
+
     if (llmClient_) {
         llmClient_->Cancel();
     }
@@ -44,6 +61,40 @@ void LLMChatPanel::Finalize() {
     }
     personaClient_.reset();
     llmClient_.reset();
+}
+
+void LLMChatPanel::SavePanelState() {
+    auto* gv = OriGine::GlobalVariables::GetInstance();
+    const std::string sc = "Settings";
+    const std::string gr = "LLMChatPanel";
+    gv->SetValue(sc, gr, "SpeakResponse", llmSpeakResponse_);
+    gv->SetValue(sc, gr, "PlayFiller", llmPlayFiller_);
+    gv->SetValue(sc, gr, "UseWhisper", llmUseWhisper_);
+    gv->SetValue(sc, gr, "AttachAppInfo", llmAttachAppInfo_);
+    gv->SetValue(sc, gr, "EnableWebSearch", llmEnableWebSearch_);
+    gv->SetValue(sc, gr, "UseMemoryContext", useMemoryContext_);
+    gv->SetValue(sc, gr, "AutoObserve", llmAutoObserve_);
+    gv->SetValue(sc, gr, "AutoObserveWebCam", llmAutoObserveWebCam_);
+    gv->SetValue(sc, gr, "AutoObserveScreen", llmAutoObserveScreen_);
+    gv->SetValue(sc, gr, "AutoObserveInterval", llmAutoObserveInterval_);
+    gv->SaveFile(sc, gr);
+}
+
+void LLMChatPanel::LoadPanelState() {
+    auto* gv = OriGine::GlobalVariables::GetInstance();
+    const std::string sc = "Settings";
+    const std::string gr = "LLMChatPanel";
+    gv->LoadFile(sc, gr);
+    llmSpeakResponse_ = *gv->AddValue<bool>(sc, gr, "SpeakResponse", llmSpeakResponse_);
+    llmPlayFiller_ = *gv->AddValue<bool>(sc, gr, "PlayFiller", llmPlayFiller_);
+    llmUseWhisper_ = *gv->AddValue<bool>(sc, gr, "UseWhisper", llmUseWhisper_);
+    llmAttachAppInfo_ = *gv->AddValue<bool>(sc, gr, "AttachAppInfo", llmAttachAppInfo_);
+    llmEnableWebSearch_ = *gv->AddValue<bool>(sc, gr, "EnableWebSearch", llmEnableWebSearch_);
+    useMemoryContext_ = *gv->AddValue<bool>(sc, gr, "UseMemoryContext", useMemoryContext_);
+    llmAutoObserve_ = *gv->AddValue<bool>(sc, gr, "AutoObserve", llmAutoObserve_);
+    llmAutoObserveWebCam_ = *gv->AddValue<bool>(sc, gr, "AutoObserveWebCam", llmAutoObserveWebCam_);
+    llmAutoObserveScreen_ = *gv->AddValue<bool>(sc, gr, "AutoObserveScreen", llmAutoObserveScreen_);
+    llmAutoObserveInterval_ = *gv->AddValue<float>(sc, gr, "AutoObserveInterval", llmAutoObserveInterval_);
 }
 
 LLMStreamCallback LLMChatPanel::MakeStreamCallback() {

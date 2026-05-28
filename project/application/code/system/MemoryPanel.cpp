@@ -33,6 +33,7 @@ void MemoryPanel::Initialize(SharedMediaContext* ctx, GatekeeperManager* gkManag
     appTracker_ = std::make_unique<AppUsageTracker>();
 
     conversationMemory_->Initialize(localLLM_.get());
+    conversationMemory_->Load("application/resource/memory/session.json");
 
     longTermMemory_->SetStoragePath("application/resource/memory");
     longTermMemory_->Load();
@@ -73,6 +74,7 @@ void MemoryPanel::Finalize() {
     if (localLLM_) {
         localLLM_->Cancel();
     }
+    conversationMemory_->Save("application/resource/memory/session.json");
     longTermMemory_->Save();
 
     userIdentifier_->Save("application/resource/memory");

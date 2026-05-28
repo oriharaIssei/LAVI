@@ -1,6 +1,7 @@
 #include "ConversationMemory.h"
 #include "LocalLLM.h"
 
+#include <fstream>
 #include <sstream>
 
 static const char* kSummarizePrompt =
@@ -18,6 +19,141 @@ ConversationMemory::~ConversationMemory() {
 
 void ConversationMemory::Initialize(LocalLLM* localLLM) {
     localLLM_ = localLLM;
+}
+
+namespace {
+
+std::string EscapeJson(const std::string& s) {
+    std::string result;
+    result.reserve(s.size() + 16);
+    for (char c : s) {
+        switch (c) {
+        case '"':  result += "\\\""; break;
+        case '\\': result += "\\\\"; break;
+        case '\n': result += "\\n"; break;
+        case '\r': result += "\\r"; break;
+        case '\t': result += "\\t"; break;
+        default:   result += c; break;
+        }
+    }
+    return result;
+}
+
+std::string UnescapeJson(const std::string& s) {
+    std::string result;
+    result.reserve(s.size());
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (s[i] == '\\' && i + 1 < s.size()) {
+            switch (s[i + 1]) {
+            case '"':  result += '"'; ++i; break;
+            case '\\': result += '\\'; ++i; break;
+            case 'n':  result += '\n'; ++i; break;
+            case 'r':  result += '\r'; ++i; break;
+            case 't':  result += '\t'; ++i; break;
+            default:   result += s[i]; break;
+            }
+        } else {
+            result += s[i];
+        }
+    }
+    return result;
+}
+
+std::string ExtractJsonString(const std::string& json, const std::string& key) {
+    std::string search = "\"" + key + "\":\"";
+    auto pos = json.find(search);
+    if (pos == std::string::npos) return "";
+    pos += search.size();
+    std::string result;
+    for (size_t i = pos; i < json.size(); ++i) {
+        if (json[i] == '\\' && i + 1 < json.size()) {
+            result += json[i];
+            result += json[i + 1];
+            ++i;
+        } else if (json[i] == '"') {
+            break;
+        } else {
+            result += json[i];
+        }
+    }
+    return UnescapeJson(result);
+}
+
+int ExtractJsonInt(const std::string& json, const std::string& key) {
+    std::string search = "\"" + key + "\":";
+    auto pos = json.find(search);
+    if (pos == std::string::npos) return 0;
+    return std::atoi(json.c_str() + pos + search.size());
+}
+
+}  // namespace
+
+bool ConversationMemory::Save(const std::string& path) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    std::ostringstream out;
+    out << "{\n";
+    out << "  \"summary\":\"" << EscapeJson(summary_) << "\",\n";
+    out << "  \"totalMessages\":" << totalMessageCount_ << ",\n";
+    out << "  \"summarizedCount\":" << summarizedCount_ << ",\n";
+    out << "  \"entries\":[\n";
+    for (size_t i = 0; i < recentEntries_.size(); ++i) {
+        auto& e = recentEntries_[i];
+        out << "    {\"role\":\"" << EscapeJson(e.role) << "\","
+            << "\"content\":\"" << EscapeJson(e.content) << "\","
+            << "\"hasImage\":" << (e.hasImage ? "true" : "false") << "}";
+        if (i + 1 < recentEntries_.size()) out << ",";
+        out << "\n";
+    }
+    out << "  ]\n}\n";
+
+    std::ofstream file(path);
+    if (!file.is_open()) return false;
+    file << out.str();
+    return true;
+}
+
+bool ConversationMemory::Load(const std::string& path) {
+    std::ifstream file(path);
+    if (!file.is_open()) return false;
+
+    std::string json((std::istreambuf_iterator<char>(file)),
+                      std::istreambuf_iterator<char>());
+    if (json.empty()) return false;
+
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    summary_ = ExtractJsonString(json, "summary");
+    totalMessageCount_ = ExtractJsonInt(json, "totalMessages");
+    summarizedCount_ = ExtractJsonInt(json, "summarizedCount");
+
+    recentEntries_.clear();
+    auto arrPos = json.find("\"entries\":[");
+    if (arrPos != std::string::npos) {
+        size_t pos = arrPos;
+        while (true) {
+            auto objStart = json.find("{\"role\":", pos);
+            if (objStart == std::string::npos) break;
+
+            auto objEnd = json.find("}", objStart);
+            if (objEnd == std::string::npos) break;
+
+            std::string obj = json.substr(objStart, objEnd - objStart + 1);
+
+            MemoryEntry entry;
+            entry.role = ExtractJsonString(obj, "role");
+            entry.content = ExtractJsonString(obj, "content");
+            entry.hasImage = (obj.find("\"hasImage\":true") != std::string::npos);
+            entry.timestamp = std::chrono::steady_clock::now();
+
+            if (!entry.role.empty() && !entry.content.empty()) {
+                recentEntries_.push_back(std::move(entry));
+            }
+            pos = objEnd + 1;
+        }
+    }
+
+    return true;
 }
 
 void ConversationMemory::PushMessage(const std::string& role, const std::string& content, bool hasImage) {

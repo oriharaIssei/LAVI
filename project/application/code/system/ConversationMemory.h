@@ -23,6 +23,9 @@ public:
 
     void Initialize(LocalLLM* localLLM);
 
+    bool Save(const std::string& path) const;
+    bool Load(const std::string& path);
+
     void PushMessage(const std::string& role, const std::string& content, bool hasImage = false);
 
     std::string GetSummary() const;

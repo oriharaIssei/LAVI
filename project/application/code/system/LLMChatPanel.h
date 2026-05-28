@@ -23,6 +23,9 @@ public:
     void Finalize();
     void Draw();
 
+    void SavePanelState();
+    void LoadPanelState();
+
 private:
     SharedMediaContext* ctx_ = nullptr;
 
