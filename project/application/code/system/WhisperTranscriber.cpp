@@ -86,6 +86,14 @@ bool WhisperTranscriber::Transcribe() {
         pcm.swap(audioBuffer_);
     }
 
+    // 入力ゲインを掛ける（マイク入力が小さいときの対策）
+    if (params_.inputGain != 1.0f) {
+        for (float& s : pcm) {
+            float v = s * params_.inputGain;
+            s = (v > 1.0f) ? 1.0f : (v < -1.0f ? -1.0f : v);
+        }
+    }
+
     whisper_full_params wparams = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH);
     wparams.n_threads            = nThreads_;
     wparams.language             = language_.c_str();
@@ -101,20 +109,32 @@ bool WhisperTranscriber::Transcribe() {
 
     wparams.suppress_blank   = true;
     wparams.suppress_nst     = true;
-    wparams.no_speech_thold  = 0.8f;
-    wparams.entropy_thold    = 2.0f;
-    wparams.logprob_thold    = -0.5f;
-    wparams.temperature      = 0.0f;
-    wparams.temperature_inc  = 0.0f;
+    wparams.no_speech_thold  = params_.noSpeechThold;
+    wparams.entropy_thold    = params_.entropyThold;
+    wparams.logprob_thold    = params_.logprobThold;
+    wparams.temperature      = params_.temperature;
+    wparams.temperature_inc  = params_.temperatureInc;
 
-    if (!vadModelPath_.empty()) {
+    if (params_.vadEnabled && !vadModelPath_.empty()) {
         wparams.vad            = true;
         wparams.vad_model_path = vadModelPath_.c_str();
-        wparams.vad_params.threshold = 0.8f;
+        wparams.vad_params.threshold = params_.vadThreshold;
     }
 
-    if (!initialPrompt_.empty()) {
-        wparams.initial_prompt = initialPrompt_.c_str();
+    // initial_prompt = ベース文 + 固有名詞リスト（綴りを寄せる）
+    // ※ whisper_full が同期的に読むので、ローカル文字列の寿命で十分
+    std::string effectivePrompt = initialPrompt_;
+    if (!vocabulary_.empty()) {
+        if (!effectivePrompt.empty()) effectivePrompt += " ";
+        effectivePrompt += "固有名詞: ";
+        for (size_t i = 0; i < vocabulary_.size(); ++i) {
+            if (i > 0) effectivePrompt += "、";
+            effectivePrompt += vocabulary_[i];
+        }
+        effectivePrompt += "。";
+    }
+    if (!effectivePrompt.empty()) {
+        wparams.initial_prompt = effectivePrompt.c_str();
     }
 
     int ret = whisper_full(ctx_, wparams, pcm.data(), static_cast<int>(pcm.size()));
@@ -135,10 +155,11 @@ bool WhisperTranscriber::Transcribe() {
         }
         if (nTokens > 0) avgProb /= static_cast<float>(nTokens);
 
-        if (avgProb < 0.4f) continue;
+        if (avgProb < params_.minAvgProb) continue;
 
-        if (text.find("(") != std::string::npos || text.find("[") != std::string::npos ||
-            text.find("（") != std::string::npos || text.find("♪") != std::string::npos) continue;
+        if (params_.filterBracketed &&
+            (text.find("(") != std::string::npos || text.find("[") != std::string::npos ||
+             text.find("（") != std::string::npos || text.find("♪") != std::string::npos)) continue;
 
         WhisperSegment seg;
         seg.text = text;
