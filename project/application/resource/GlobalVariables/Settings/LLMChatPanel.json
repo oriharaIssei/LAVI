@@ -1,0 +1,14 @@
+{
+    "LLMChatPanel": {
+        "AttachAppInfo": false,
+        "AutoObserve": false,
+        "AutoObserveInterval": 10.0,
+        "AutoObserveScreen": false,
+        "AutoObserveWebCam": true,
+        "EnableWebSearch": false,
+        "PlayFiller": true,
+        "SpeakResponse": false,
+        "UseMemoryContext": true,
+        "UseWhisper": false
+    }
+}

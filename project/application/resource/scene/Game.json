@@ -9,6 +9,57 @@
         true,
         true
     ],
+    "Entities": [
+        {
+            "Components": {
+                "TextComponent": [
+                    {
+                        "Handle": "907ced67-e5e3-4120-b5ef-c61b2d9092dc",
+                        "align": 0,
+                        "charSpacing": 0.0,
+                        "color": [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0
+                        ],
+                        "fontHandle": 4294967295,
+                        "fontSize": 24.0,
+                        "lineSpacing": 1.0,
+                        "maxWidth": 0.0,
+                        "position": [
+                            0.0,
+                            0.0
+                        ],
+                        "renderPriority": 10,
+                        "showBounds": false,
+                        "text": "",
+                        "visible": true
+                    }
+                ],
+                "TextStreamComponent": [
+                    {
+                        "Handle": "3c5c4c49-d2b3-41e4-982f-1a8d6987877a",
+                        "charsPerSecond": 30.0,
+                        "loop": false,
+                        "playing": true,
+                        "startDelay": 0.0
+                    }
+                ]
+            },
+            "Handle": {
+                "uuid": "3bbb487e-a262-4ac1-b700-ffd207d56955"
+            },
+            "Name": "Entity",
+            "Systems": [
+                {
+                    "SystemCategory": 6,
+                    "SystemName": "TextRenderSystem"
+                }
+            ],
+            "isUnique": false
+        }
+    ],
     "Systems": [
         {
             "CameraInitialize": {
@@ -17,6 +68,21 @@
         },
         {
             "MediaCaptureDemoSystem": {
+                "Priority": 0
+            }
+        },
+        {
+            "TextRenderSystem": {
+                "Priority": 0
+            }
+        },
+        {
+            "TextBoundsRenderSystem": {
+                "Priority": 1
+            }
+        },
+        {
+            "TextStreamSystem": {
                 "Priority": 0
             }
         }

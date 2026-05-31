@@ -45,6 +45,9 @@ void RegisterUsingComponents(){
 
 	componentRegistry->RegisterComponent<Transform>();
 	componentRegistry->RegisterComponent<CameraTransform>();
+	componentRegistry->RegisterComponent<TextComponent>();
+	componentRegistry->RegisterComponent<TextStreamComponent>();
+
 }
 
 void RegisterUsingSystems(){
@@ -52,4 +55,9 @@ void RegisterUsingSystems(){
 
 	systemRegistry->RegisterSystem<CameraInitialize>();
 	systemRegistry->RegisterSystem<MediaCaptureDemoSystem>();
+
+	systemRegistry->RegisterSystem<TextRenderSystem>();
+	systemRegistry->RegisterSystem<TextBoundsRenderSystem>();
+	systemRegistry->RegisterSystem<TextStreamSystem>();
+
 }
