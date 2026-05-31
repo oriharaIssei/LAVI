@@ -34,6 +34,12 @@ private:
     std::string llmStreamingText_;
     std::future<LLMResponse> llmFuture_;
     bool isLLMProcessing_ = false;
+
+    // バックエンド切替: クラウド Claude / ローカル LLM（MemoryPanel の共有インスタンスを再利用）
+    bool useLocalLLM_ = false;
+    bool localEnableThinking_ = false; // reasoning モデルの思考を使うか（既定 OFF＝高速）
+    std::future<std::string> localFuture_;
+    LLMStreamCallback activeStreamCb_;
     bool llmAutoScroll_ = true;
     LLMResponse lastLLMResponse_;
     bool llmUseWhisper_ = false;

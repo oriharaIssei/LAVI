@@ -3,6 +3,7 @@
 #include "AppConfig.h"
 #include "EmotionTag.h"
 #include "MemoryPanel.h"
+#include "LocalLLM.h"
 #include "ConversationMemory.h"
 #include "WebAction.h"
 #include "LongTermMemory.h"
@@ -70,6 +71,8 @@ void LLMChatPanel::SavePanelState() {
     gv->SetValue(sc, gr, "SpeakResponse", llmSpeakResponse_);
     gv->SetValue(sc, gr, "PlayFiller", llmPlayFiller_);
     gv->SetValue(sc, gr, "UseWhisper", llmUseWhisper_);
+    gv->SetValue(sc, gr, "UseLocalLLM", useLocalLLM_);
+    gv->SetValue(sc, gr, "LocalEnableThinking", localEnableThinking_);
     gv->SetValue(sc, gr, "AttachAppInfo", llmAttachAppInfo_);
     gv->SetValue(sc, gr, "EnableWebSearch", llmEnableWebSearch_);
     gv->SetValue(sc, gr, "UseMemoryContext", useMemoryContext_);
@@ -88,6 +91,8 @@ void LLMChatPanel::LoadPanelState() {
     llmSpeakResponse_ = *gv->AddValue<bool>(sc, gr, "SpeakResponse", llmSpeakResponse_);
     llmPlayFiller_ = *gv->AddValue<bool>(sc, gr, "PlayFiller", llmPlayFiller_);
     llmUseWhisper_ = *gv->AddValue<bool>(sc, gr, "UseWhisper", llmUseWhisper_);
+    useLocalLLM_ = *gv->AddValue<bool>(sc, gr, "UseLocalLLM", useLocalLLM_);
+    localEnableThinking_ = *gv->AddValue<bool>(sc, gr, "LocalEnableThinking", localEnableThinking_);
     llmAttachAppInfo_ = *gv->AddValue<bool>(sc, gr, "AttachAppInfo", llmAttachAppInfo_);
     llmEnableWebSearch_ = *gv->AddValue<bool>(sc, gr, "EnableWebSearch", llmEnableWebSearch_);
     useMemoryContext_ = *gv->AddValue<bool>(sc, gr, "UseMemoryContext", useMemoryContext_);
@@ -222,29 +227,35 @@ void LLMChatPanel::SendLLMRequest(const std::string& text, const std::vector<LLM
     llmClient_->SetApiKey(ctx_->config.apiKey);
     llmClient_->SetEnableWebSearch(llmEnableWebSearch_ && NeedsSummary(text));
 
-    std::string systemPrompt = ctx_->config.llmSystemPrompt;
+    // ペルソナ（固定）と、毎ターン変わる文脈（記憶・Web・アプリ情報）を分けて持つ。
+    // クラウドは従来どおり system に全部入れる。ローカルは persona を system に固定し、
+    // 変動文脈は最新ユーザー発話に載せる（persona+履歴のKVプレフィックスを再利用＝高速化、かつ記憶は見せる）。
+    const std::string personaPrompt = ctx_->config.llmSystemPrompt;
+    std::string volatileContext;
 
     if (useMemoryContext_ && memoryPanel_) {
         std::string memCtx = memoryPanel_->BuildMemoryContext();
         if (!memCtx.empty()) {
-            systemPrompt += "\n\n" + memCtx;
+            volatileContext += "\n\n" + memCtx;
         }
     }
 
     bool hasAction = actionPipeline_ ? actionPipeline_->ContainsActionKeyword(text)
                                      : ContainsActionKeyword(text);
     if (llmEnableWebSearch_ || hasAction) {
-        systemPrompt += "\n\n";
-        systemPrompt += GetWebActionPrompt();
+        volatileContext += "\n\n";
+        volatileContext += GetWebActionPrompt();
     }
 
     if (llmAttachAppInfo_) {
         auto apps = OriGine::ProcessManager::EnumerateWindows();
         std::string appText = OriGine::ProcessManager::FormatAsText(apps);
         if (!appText.empty()) {
-            systemPrompt += "\n\n## 現在ユーザーが開いているアプリケーション\n" + appText;
+            volatileContext += "\n\n## 現在ユーザーが開いているアプリケーション\n" + appText;
         }
     }
+
+    std::string systemPrompt = personaPrompt + volatileContext; // クラウド用（従来互換）
     llmClient_->SetSystemPrompt(systemPrompt);
 
     if (memoryPanel_) {
@@ -267,6 +278,14 @@ void LLMChatPanel::SendLLMRequest(const std::string& text, const std::vector<LLM
         llmClient_->AddMessageWithImages("user", userText, frames);
     }
 
+    // ローカル LLM 使用時、モデル未ロードなら送信しない
+    LocalLLM* local = (useLocalLLM_ && memoryPanel_) ? memoryPanel_->GetLocalLLM() : nullptr;
+    if (useLocalLLM_ && (!local || !local->IsModelLoaded())) {
+        lastLLMResponse_ = LLMResponse{};
+        lastLLMResponse_.error = "Local LLM model not loaded";
+        return;
+    }
+
     isLLMProcessing_ = true;
     llmStreamingText_.clear();
 
@@ -279,7 +298,28 @@ void LLMChatPanel::SendLLMRequest(const std::string& text, const std::vector<LLM
         }
     }
 
-    llmFuture_ = llmClient_->SendStreamAsync(MakeStreamCallback());
+    if (local) {
+        local->SetDisableThinking(!localEnableThinking_);
+        // 直近の会話履歴を LocalChatMessage へ（ローカルは文脈長が小さいので末尾のみ）
+        const auto& hist = llmClient_->GetHistory();
+        std::vector<LocalChatMessage> msgs;
+        size_t startIdx = hist.size() > 16 ? hist.size() - 16 : 0;
+        for (size_t i = startIdx; i < hist.size(); ++i) {
+            msgs.push_back({hist[i].role, hist[i].content});
+        }
+        // 記憶・アプリ情報などの変動文脈は「今回のユーザー発話」に載せる。
+        // → persona(system) と過去履歴は不変のまま＝KVプレフィックス再利用で高速、かつ記憶は参照される。
+        if (!volatileContext.empty() && !msgs.empty()) {
+            msgs.back().content += "\n\n[参考情報]" + volatileContext;
+        }
+        // persona のみを system に（固定）。クラウドと同じストリーミングCBを流用（done は完了時）
+        activeStreamCb_ = MakeStreamCallback();
+        localFuture_ = local->GenerateChatStreamAsync(
+            personaPrompt, msgs,
+            [this](const std::string& tok) { activeStreamCb_(tok, false); });
+    } else {
+        llmFuture_ = llmClient_->SendStreamAsync(MakeStreamCallback());
+    }
 }
 
 void LLMChatPanel::Draw() {
@@ -355,6 +395,26 @@ void LLMChatPanel::Draw() {
     }
 
     ImGui::Spacing();
+
+    // バックエンド選択（クラウド Claude / ローカル LLM 共有インスタンス）
+    ImGui::Text("Backend:");
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Cloud (Claude)##backend", !useLocalLLM_)) { useLocalLLM_ = false; }
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Local##backend", useLocalLLM_)) { useLocalLLM_ = true; }
+    if (useLocalLLM_) {
+        LocalLLM* local = memoryPanel_ ? memoryPanel_->GetLocalLLM() : nullptr;
+        bool loaded = local && local->IsModelLoaded();
+        ImGui::SameLine();
+        if (loaded) {
+            ImGui::TextColored(ImVec4(0.4f, 1, 0.4f, 1), "(model loaded)");
+        } else {
+            ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "(load model in Memory panel)");
+        }
+        ImGui::SameLine();
+        ImGui::Checkbox("Thinking##local", &localEnableThinking_);
+        ImGui::TextDisabled("Local: 画像/画面添付・Web検索は無効。Thinking OFF で高速・<think>除去");
+    }
 
     ImGui::Text("Text Input:");
     ImGui::SameLine();
@@ -475,6 +535,31 @@ void LLMChatPanel::Draw() {
         llmStreamingText_.clear();
     }
 
+    // Local LLM async result
+    if (isLLMProcessing_ && localFuture_.valid() &&
+        localFuture_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        std::string out = localFuture_.get();
+        if (activeStreamCb_) activeStreamCb_("", true); // 合成パイプラインの終端
+
+        lastLLMResponse_ = LLMResponse{};
+        lastLLMResponse_.content = out;
+        lastLLMResponse_.success = !out.empty();
+
+        if (!out.empty()) {
+            llmClient_->AddMessage("assistant", out);
+            auto actions = ParseWebActions(out);
+            if (!actions.empty()) {
+                LongTermMemory* ltm = memoryPanel_ ? memoryPanel_->GetLongTermMemory() : nullptr;
+                ExecuteWebActions(actions, ltm);
+            }
+            if (memoryPanel_) {
+                memoryPanel_->GetConversationMemory()->PushMessage("assistant", out);
+            }
+        }
+        isLLMProcessing_ = false;
+        llmStreamingText_.clear();
+    }
+
     // Stop synth worker when streaming is done
     if (!isLLMProcessing_) {
         synthPipeline_.StopWorker();
@@ -551,7 +636,14 @@ void LLMChatPanel::Draw() {
 
     ImGui::SameLine();
 
-    bool canSend = !llmUserInput_.empty() && !ctx_->config.apiKey.empty() && !isLLMProcessing_;
+    bool backendReady;
+    if (useLocalLLM_) {
+        LocalLLM* local = memoryPanel_ ? memoryPanel_->GetLocalLLM() : nullptr;
+        backendReady = local && local->IsModelLoaded();
+    } else {
+        backendReady = !ctx_->config.apiKey.empty();
+    }
+    bool canSend = !llmUserInput_.empty() && backendReady && !isLLMProcessing_;
     if (!canSend) ImGui::BeginDisabled();
 
     if (ImGui::Button("Send##llm") || (enterPressed && canSend)) {

@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <nlohmann/json.hpp>
 
 MemoryPanel::MemoryPanel() = default;
 MemoryPanel::~MemoryPanel() = default;
@@ -39,6 +40,8 @@ void MemoryPanel::Initialize(SharedMediaContext* ctx, GatekeeperManager* gkManag
     longTermMemory_->Load();
 
     localModelPath_ = "application/resource/llm/models/Qwen3-4B-Q4_K_M.gguf";
+    ScanModels();
+    LoadLLMConfig(); // 保存済みの選択があれば localModelPath_ を上書き
     arcfaceModelPath_ = "application/resource/gatekeeper/arcfaceresnet100.onnx";
 
     // ArcFace があれば自動ロード
@@ -89,6 +92,48 @@ void MemoryPanel::Finalize() {
     conversationMemory_.reset();
     longTermMemory_.reset();
     localLLM_.reset();
+}
+
+void MemoryPanel::ScanModels() {
+    availableModels_.clear();
+    std::error_code ec;
+    if (!std::filesystem::exists(modelsDir_, ec)) return;
+    for (const auto& entry : std::filesystem::directory_iterator(modelsDir_, ec)) {
+        if (ec) break;
+        if (!entry.is_regular_file()) continue;
+        if (entry.path().extension() == ".gguf") {
+            // パス区切りは前方スラッシュで統一
+            std::string p = entry.path().generic_string();
+            availableModels_.push_back(p);
+        }
+    }
+    std::sort(availableModels_.begin(), availableModels_.end());
+}
+
+void MemoryPanel::LoadLLMConfig() {
+    std::ifstream file(llmConfigPath_);
+    if (!file.is_open()) return;
+    try {
+        nlohmann::json data;
+        file >> data;
+        if (data.contains("chatModel") && data["chatModel"].is_string()) {
+            std::string path = data["chatModel"].get<std::string>();
+            if (!path.empty() && std::filesystem::exists(path)) {
+                localModelPath_ = path;
+            }
+        }
+    } catch (...) {
+        // 壊れていたらデフォルトのまま
+    }
+}
+
+void MemoryPanel::SaveLLMConfig() {
+    nlohmann::json data;
+    data["chatModel"] = localModelPath_;
+    std::ofstream file(llmConfigPath_);
+    if (file.is_open()) {
+        file << data.dump(2);
+    }
 }
 
 void MemoryPanel::Update() {
@@ -185,6 +230,25 @@ void MemoryPanel::Draw() {
     if (ImGui::CollapsingHeader("Local LLM (Summarizer)", ImGuiTreeNodeFlags_DefaultOpen)) {
         bool loaded = localLLM_->IsModelLoaded();
         ImGui::Text("Status: %s", loaded ? "Loaded" : "Not Loaded");
+
+        // モデル選択ドロップダウン（resource/llm/models の *.gguf）
+        if (!loaded) {
+            std::string current = std::filesystem::path(localModelPath_).filename().string();
+            if (ImGui::BeginCombo("Model##mem_select", current.empty() ? "(none)" : current.c_str())) {
+                for (const auto& m : availableModels_) {
+                    std::string name = std::filesystem::path(m).filename().string();
+                    bool sel = (m == localModelPath_);
+                    if (ImGui::Selectable(name.c_str(), sel)) {
+                        localModelPath_ = m;
+                        SaveLLMConfig();
+                    }
+                    if (sel) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Rescan##mem")) ScanModels();
+        }
 
         ImGui::InputText("Model Path##mem", localModelPath_.data(), localModelPath_.capacity() + 1,
             ImGuiInputTextFlags_CallbackResize,

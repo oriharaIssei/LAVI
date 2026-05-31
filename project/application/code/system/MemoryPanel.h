@@ -49,6 +49,14 @@ private:
     std::string arcfaceModelPath_;
     bool modelLoadRequested_ = false;
 
+    // ローカル LLM モデルの選択（gguf 一覧 + 選択の永続化。ハードコードしない）
+    std::string modelsDir_ = "application/resource/llm/models";
+    std::string llmConfigPath_ = "application/resource/llm/llm_config.json";
+    std::vector<std::string> availableModels_;
+    void ScanModels();        // modelsDir_ の *.gguf を列挙
+    void LoadLLMConfig();     // 選択済みモデルパスを復元
+    void SaveLLMConfig();     // 選択済みモデルパスを保存
+
     float autoSaveInterval_ = 300.0f;
     float autoSaveTimer_ = 0.0f;
 
