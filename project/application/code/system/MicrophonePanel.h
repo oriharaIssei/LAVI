@@ -18,7 +18,14 @@ class MicrophonePanel{
 public:
 	void Initialize(SharedMediaContext* ctx);
 	void Finalize();
+	void Update();   // 非同期処理(転写/校正/集約)の完了取り込み。タブ非表示でも毎フレーム呼ぶ
 	void Draw();
+
+	// ターン制御（TurnController）から駆動するための入口
+	float GetCurrentLevel();        // 直近の音声 RMS
+	bool IsCapturing() const;       // マイクキャプチャ中か
+	void ClearAudioBuffer();        // 発話開始時に蓄積をクリア
+	void RequestTranscribe();       // 発話終了時に非同期転写を開始（モデル要ロード）
 
 private:
 	SharedMediaContext* ctx_ = nullptr;

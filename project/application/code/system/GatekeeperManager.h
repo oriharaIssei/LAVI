@@ -16,6 +16,7 @@ struct SharedMediaContext;
 class LongTermMemory;
 class SentenceEmbedding;
 class ActionPipeline;
+class LocalLLM;
 
 enum class GateSource { Camera, Screen, Mic };
 
@@ -62,6 +63,7 @@ public:
         bool autoEscalate = false;     // 判断を自動で Claude へ送出するか
         float escalateCooldown = 8.0f; // 自動送出の最小間隔 (秒)
         bool autoSpeak = true;         // 応答を VoiceVox で発話するか
+        bool useLocalLLM = true;       // 応答生成にローカル LLM を使う（未ロード時はクラウドへフォールバック）
     };
 
     GatekeeperManager();
@@ -74,6 +76,7 @@ public:
     void SetLongTermMemory(LongTermMemory* mem) { longTermMemory_ = mem; }
     void SetSentenceEmbedding(SentenceEmbedding* emb) { embedding_ = emb; }
     void SetActionPipeline(ActionPipeline* pipeline) { actionPipeline_ = pipeline; }
+    void SetLocalLLM(LocalLLM* llm) { localLLM_ = llm; }
     void Update();  // MediaCaptureDemoSystem::Update から毎フレーム呼ぶ
 
     CameraGatekeeper* Camera() { return camera_.get(); }
@@ -95,6 +98,10 @@ public:
 
     // 直近の判断を手動で Claude へ送出する
     void EscalateLatest();
+
+    // 発話区間検出で確定したユーザー発話(ctx_->transcribedText)を
+    // 会話としてゲートキーパー経由で LLM へ送出する（自動ターン応答用）。
+    void RespondToSpeech();
     bool LlmBusy() const { return llmBusy_; }
     const std::string& LastResponse() const { return lastResponse_; }
 
@@ -134,9 +141,11 @@ private:
     uint32_t lastCamW_ = 0, lastCamH_ = 0;
     uint32_t lastScreenW_ = 0, lastScreenH_ = 0;
 
-    // Claude 送出 (エスカレーション)
-    LLMClient llm_;
+    // LLM 送出 (エスカレーション)
+    LLMClient llm_;                          // クラウド (Claude)
     std::future<LLMResponse> llmFuture_;
+    LocalLLM* localLLM_ = nullptr;           // ローカル (共有インスタンス。所有しない)
+    std::future<std::string> localFuture_;
     bool llmBusy_ = false;
     std::string lastResponse_;
     double lastEscalate_ = -1.0e9;

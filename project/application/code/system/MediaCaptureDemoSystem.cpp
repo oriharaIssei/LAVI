@@ -51,6 +51,28 @@ void MediaCaptureDemoSystem::Initialize(){
 	memoryPanel_->Initialize(ctx_.get(),gkManager_.get());
 	llmPanel_->SetMemoryPanel(memoryPanel_.get());
 	gkManager_->SetLongTermMemory(memoryPanel_->GetLongTermMemory());
+	gkManager_->SetLocalLLM(memoryPanel_->GetLocalLLM()); // 自動音声応答もローカル LLM で（共有）
+
+	// 発話区間検出・ターン制御
+	turnController_ = std::make_unique<TurnController>();
+	turnController_->LoadConfig("application/resource/turn/turn_config.json");
+	turnController_->SetOnUserSpeechStart([this]() {
+		// 発話開始: このターン分の音声を取り直すためバッファをクリア
+		micPanel_->ClearAudioBuffer();
+	});
+	turnController_->SetOnUserSpeechEnd([this]() {
+		// 発話終了: 自動で転写を開始（結果は MicrophonePanel が ctx_->transcribedText に反映）
+		micPanel_->RequestTranscribe();
+	});
+	turnController_->SetOnBargeIn([this]() {
+		// LAVI 発話中にユーザーが割り込んだ → TTS を即停止してユーザーを優先
+		if(ctx_->voiceVox){
+			ctx_->voiceVox->Stop();
+		}
+		ctx_->isSpeaking = false;
+		// （この直後に onUserSpeechStart が呼ばれ、音声バッファはクリアされる）
+	});
+	lastTurnTick_ = std::chrono::steady_clock::now();
 
 	LoadTagAxes("application/resource/memory/tag_axes.json");
 
@@ -113,11 +135,81 @@ void MediaCaptureDemoSystem::Finalize(){
 	ctx_.reset();
 }
 
+void MediaCaptureDemoSystem::DrawTurnControlUI(){
+	if(!turnController_) return;
+
+	if(ImGui::CollapsingHeader("Turn Control (発話区間検出)")){
+		TurnConfig& cfg = turnController_->Config();
+
+		static const char* kStateName[] = {"Idle", "UserSpeaking", "Processing", "LaviSpeaking"};
+		int st = static_cast<int>(turnController_->State());
+		ImGui::Text("State: %s", kStateName[st]);
+		ImGui::SameLine();
+		float rms = turnController_->CurrentRms();
+		ImGui::Text("  RMS: %.4f", rms);
+		// しきい値に対する現在レベルのバー（start を 1.0 とする目安表示）
+		float disp = cfg.startThreshold > 0.0f ? (rms / (cfg.startThreshold * 2.0f)) : 0.0f;
+		ImGui::ProgressBar(disp > 1.0f ? 1.0f : disp, ImVec2(-1, 0), "");
+
+		ImGui::Checkbox("Enabled##turn", &cfg.enabled);
+		ImGui::SameLine();
+		ImGui::Checkbox("Barge-in##turn", &cfg.bargeInEnabled);
+
+		// 自動音声応答の LLM バックエンド（GateKeeper 経由）
+		ImGui::Checkbox("Voice via Local LLM##turn", &gkManager_->config().useLocalLLM);
+		ImGui::SameLine();
+		ImGui::TextDisabled(gkManager_->config().useLocalLLM
+			? "(未ロード時はクラウドへフォールバック)"
+			: "(クラウド Claude を使用)");
+
+		ImGui::SliderFloat("Start Thld##turn", &cfg.startThreshold, 0.001f, 0.2f, "%.4f");
+		ImGui::SliderFloat("End Thld##turn", &cfg.endThreshold, 0.001f, 0.2f, "%.4f");
+		ImGui::SliderFloat("Min Speech (ms)##turn", &cfg.minSpeechMs, 0.0f, 1000.0f, "%.0f");
+		ImGui::SliderFloat("Silence Hangover (ms)##turn", &cfg.silenceHangoverMs, 100.0f, 3000.0f, "%.0f");
+		ImGui::SliderFloat("Barge-in (ms)##turn", &cfg.bargeInMs, 50.0f, 1500.0f, "%.0f");
+
+		if(ImGui::Button("Save Turn Config")){
+			turnController_->SaveConfig();
+		}
+		ImGui::TextDisabled("発話を検知すると自動で転写します。マイクのキャプチャを開始してください。");
+	}
+}
+
 void MediaCaptureDemoSystem::Update(){
 	if(ctx_->isSpeaking && ctx_->speakFuture.valid() &&
 	   ctx_->speakFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready){
 		ctx_->speakFuture.get();
 		ctx_->isSpeaking = false;
+	}
+
+	// 発話区間検出・ターン制御の駆動（メインスレッドで毎フレーム）
+	{
+		auto now = std::chrono::steady_clock::now();
+		float dt = std::chrono::duration<float>(now - lastTurnTick_).count();
+		lastTurnTick_ = now;
+		if(dt > 0.5f) dt = 0.5f; // 初回や停止後のスパイクをクランプ
+
+		if(micPanel_->IsCapturing()){
+			turnController_->Update(micPanel_->GetCurrentLevel(), dt, ctx_->isSpeaking);
+		}
+
+		// LAVI 発話状態(isSpeaking)のエッジでターン状態を遷移
+		if(ctx_->isSpeaking && !prevSpeaking_) turnController_->NotifyResponseStarted();
+		if(!ctx_->isSpeaking && prevSpeaking_) turnController_->NotifyResponseEnded();
+		prevSpeaking_ = ctx_->isSpeaking;
+
+		// 応答が来ない場合に Processing で固まらないようにする取りこぼし対策
+		if(turnController_->State() == TurnState::Processing){
+			if(!processingActive_){ processingActive_ = true; processingSince_ = now; }
+			else if(!ctx_->isSpeaking && !gkManager_->LlmBusy() &&
+					std::chrono::duration<float>(now - processingSince_).count() > 8.0f){
+				// 応答が来ない場合のみ待機へ戻す（LLM 処理中は待つ）
+				turnController_->Reset();
+				processingActive_ = false;
+			}
+		} else {
+			processingActive_ = false;
+		}
 	}
 
 	// ウェイクワード検出
@@ -142,11 +234,24 @@ void MediaCaptureDemoSystem::Update(){
 		}
 	}
 
-	// ゲートキーパーは UI のタブ選択に関係なく毎フレーム評価する
+	// UI のタブ選択に関係なく毎フレーム実行する処理
+	micPanel_->Update();   // 転写/校正/集約の完了取り込み（自動転写のため必須）
+
+	// 発話区間検出で確定 → 転写完了したら、GateKeeper 経由で LLM へ自動送信
+	if(turnController_->State() == TurnState::Processing &&
+	   !ctx_->transcribedText.empty() &&
+	   ctx_->transcribedText != lastTurnTranscript_ &&
+	   !gkManager_->LlmBusy()){
+		lastTurnTranscript_ = ctx_->transcribedText;
+		gkManager_->RespondToSpeech();
+	}
+
 	gkManager_->Update();
 	memoryPanel_->Update();
 
 	ImGui::Begin("Media Capture Demo");
+
+	DrawTurnControlUI();
 
 	if(ImGui::BeginTabBar("MediaTabs")){
 		if(ImGui::BeginTabItem("Microphone")){

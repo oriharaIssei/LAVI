@@ -6,7 +6,7 @@
   {"processName":"vesktop.exe","windowTitle":"• Discord | フレンド","tags":[],"launchCount":1,"totalForegroundMinutes":0,"totalBackgroundMinutes":12.6739,"firstSeen":"2026-05-23 21:15","lastSeen":"2026-05-23 21:15"},
   {"processName":"brave.exe","windowTitle":"youtube.com/results?search_query=YOASOBI ヨルシカ なとり MIX - Brave","tags":[],"launchCount":21,"totalForegroundMinutes":61.6063,"totalBackgroundMinutes":228.869,"firstSeen":"2026-05-23 21:15","lastSeen":"2026-05-28 14:38"},
   {"processName":"Nahimic3.exe","windowTitle":"Nahimic","tags":[],"launchCount":1,"totalForegroundMinutes":0,"totalBackgroundMinutes":316.09,"firstSeen":"2026-05-23 21:15","lastSeen":"2026-05-28 15:44"},
-  {"processName":"claude.exe","windowTitle":"Claude","tags":[],"launchCount":10,"totalForegroundMinutes":21.1373,"totalBackgroundMinutes":271.303,"firstSeen":"2026-05-23 21:15","lastSeen":"2026-05-28 15:44"},
+  {"processName":"claude.exe","windowTitle":"Claude","tags":[],"launchCount":11,"totalForegroundMinutes":21.3408,"totalBackgroundMinutes":277.589,"firstSeen":"2026-05-23 21:15","lastSeen":"2026-06-01 01:13"},
   {"processName":"ui32.exe","windowTitle":"Wallpaper UI","tags":[],"launchCount":1,"totalForegroundMinutes":0.120751,"totalBackgroundMinutes":0,"firstSeen":"2026-05-24 09:34","lastSeen":"2026-05-24 09:34"},
   {"processName":"Discord.exe","windowTitle":"Discord","tags":[],"launchCount":1,"totalForegroundMinutes":0.248154,"totalBackgroundMinutes":173.854,"firstSeen":"2026-05-24 12:45","lastSeen":"2026-05-24 20:32"},
   {"processName":"steamwebhelper.exe","windowTitle":"Steam","tags":[],"launchCount":1,"totalForegroundMinutes":0.217165,"totalBackgroundMinutes":173.346,"firstSeen":"2026-05-24 12:45","lastSeen":"2026-05-24 20:32"},
@@ -17,5 +17,5 @@
   {"processName":"google.exe","windowTitle":"Google app","tags":[],"launchCount":1,"totalForegroundMinutes":0,"totalBackgroundMinutes":13.528,"firstSeen":"2026-05-26 09:50","lastSeen":"2026-05-28 15:44"},
   {"processName":"Zoom.exe","windowTitle":"Zoom Meeting","tags":[],"launchCount":1,"totalForegroundMinutes":0,"totalBackgroundMinutes":3.43033,"firstSeen":"2026-05-26 09:50","lastSeen":"2026-05-26 09:50"},
   {"processName":"Codex.exe","windowTitle":"Codex","tags":[],"launchCount":1,"totalForegroundMinutes":0,"totalBackgroundMinutes":3.43034,"firstSeen":"2026-05-26 09:50","lastSeen":"2026-05-26 09:50"},
-  {"processName":"XboxGameBarWidgets.exe","windowTitle":"Xbox Game Bar Widgets","tags":["ツール","作業"],"launchCount":1,"totalForegroundMinutes":0,"totalBackgroundMinutes":0.0532995,"firstSeen":"2026-05-28 14:37","lastSeen":"2026-05-28 14:37"}
+  {"processName":"XboxGameBarWidgets.exe","windowTitle":"Xbox Game Bar Widgets","tags":["ツール","作業"],"launchCount":1,"totalForegroundMinutes":0,"totalBackgroundMinutes":0.109801,"firstSeen":"2026-05-28 14:37","lastSeen":"2026-06-01 07:57"}
 ]
