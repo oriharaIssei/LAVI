@@ -147,9 +147,12 @@ void MediaCaptureDemoSystem::DrawTurnControlUI(){
 		ImGui::SameLine();
 		float rms = turnController_->CurrentRms();
 		ImGui::Text("  RMS: %.4f", rms);
-		// しきい値に対する現在レベルのバー（start を 1.0 とする目安表示）
-		float disp = cfg.startThreshold > 0.0f ? (rms / (cfg.startThreshold * 2.0f)) : 0.0f;
+		// 実効開始しきい値に対する現在レベルのバー（適応時は動的に変化する）
+		float effStart = turnController_->EffectiveStartThreshold();
+		float disp = effStart > 0.0f ? (rms / (effStart * 2.0f)) : 0.0f;
 		ImGui::ProgressBar(disp > 1.0f ? 1.0f : disp, ImVec2(-1, 0), "");
+		ImGui::Text("NoiseFloor: %.4f  EffStart: %.4f  EffEnd: %.4f",
+			turnController_->NoiseFloor(), effStart, turnController_->EffectiveEndThreshold());
 
 		ImGui::Checkbox("Enabled##turn", &cfg.enabled);
 		ImGui::SameLine();
@@ -167,6 +170,16 @@ void MediaCaptureDemoSystem::DrawTurnControlUI(){
 		ImGui::SliderFloat("Min Speech (ms)##turn", &cfg.minSpeechMs, 0.0f, 1000.0f, "%.0f");
 		ImGui::SliderFloat("Silence Hangover (ms)##turn", &cfg.silenceHangoverMs, 100.0f, 3000.0f, "%.0f");
 		ImGui::SliderFloat("Barge-in (ms)##turn", &cfg.bargeInMs, 50.0f, 1500.0f, "%.0f");
+
+		ImGui::Separator();
+		ImGui::Checkbox("Adaptive Noise Floor##turn", &cfg.adaptiveNoise);
+		ImGui::TextDisabled("環境ノイズを推定し開始/終了しきい値を動的化（Start/End Thld は下限として作用）");
+		if(cfg.adaptiveNoise){
+			ImGui::SliderFloat("Noise Start x##turn", &cfg.noiseStartMult, 1.5f, 8.0f, "%.2f");
+			ImGui::SliderFloat("Noise End x##turn", &cfg.noiseEndMult, 1.2f, 6.0f, "%.2f");
+			ImGui::SliderFloat("Adapt Up (ms)##turn", &cfg.noiseAdaptUpMs, 500.0f, 8000.0f, "%.0f");
+			ImGui::SliderFloat("Adapt Down (ms)##turn", &cfg.noiseAdaptDownMs, 100.0f, 3000.0f, "%.0f");
+		}
 
 		if(ImGui::Button("Save Turn Config")){
 			turnController_->SaveConfig();

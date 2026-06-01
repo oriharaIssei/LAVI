@@ -42,16 +42,37 @@ void MicrophonePanel::Initialize(SharedMediaContext* ctx) {
 
     microphone_->SetDataCallback(
         [this](const float* data, uint32_t frameCount, uint32_t channels) {
+            if (channels == 0 || frameCount == 0) return;
+            const uint32_t totalSamples = frameCount * channels;
+
+            // 広帯域 RMS（表示・比較用）
             float rms = 0.0f;
-            uint32_t totalSamples = frameCount * channels;
             for (uint32_t i = 0; i < totalSamples; ++i) {
                 rms += data[i] * data[i];
             }
             rms = std::sqrt(rms / static_cast<float>(totalSamples));
 
+            // 声帯域バンドパス後の RMS（VAD 用）。チャンネルはモノにダウンミックスしてから濾波。
+            float voiceRms = rms;
+            if (voiceBandEnabled_) {
+                voiceBandFilter_.Configure(static_cast<float>(microphone_->GetFormat().sampleRate));
+                float acc = 0.0f;
+                for (uint32_t f = 0; f < frameCount; ++f) {
+                    float mono = 0.0f;
+                    for (uint32_t c = 0; c < channels; ++c) {
+                        mono += data[f * channels + c];
+                    }
+                    mono /= static_cast<float>(channels);
+                    const float y = voiceBandFilter_.Process(mono);
+                    acc += y * y;
+                }
+                voiceRms = std::sqrt(acc / static_cast<float>(frameCount));
+            }
+
             {
                 std::lock_guard<std::mutex> lock(audioMutex_);
                 currentAudioLevel_ = rms;
+                voiceBandLevel_ = voiceRms;
                 if (rms > peakAudioLevel_) {
                     peakAudioLevel_ = rms;
                 }
@@ -191,6 +212,11 @@ void MicrophonePanel::Update() {
 
 float MicrophonePanel::GetCurrentLevel() {
     std::lock_guard<std::mutex> lock(audioMutex_);
+    return voiceBandEnabled_ ? voiceBandLevel_ : currentAudioLevel_;
+}
+
+float MicrophonePanel::GetBroadbandLevel() {
+    std::lock_guard<std::mutex> lock(audioMutex_);
     return currentAudioLevel_;
 }
 
@@ -266,6 +292,9 @@ void MicrophonePanel::Draw() {
         ImGui::ProgressBar(displayLevel, ImVec2(-1, 0), "");
 
         ImGui::Text("RMS: %.6f / Peak: %.6f", currentAudioLevel_, peakAudioLevel_);
+        ImGui::Text("VoiceBand RMS: %.6f  (VAD %s)", voiceBandLevel_,
+                    voiceBandEnabled_ ? "ON" : "OFF");
+        ImGui::Checkbox("Voice Band-pass (300-3400Hz)", &voiceBandEnabled_);
         if (ImGui::Button("Reset Peak")) {
             peakAudioLevel_ = 0.0f;
         }

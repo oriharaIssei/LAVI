@@ -9,6 +9,7 @@
 #include "WhisperTranscriber.h"
 #include "TranscriptRefiner.h"
 #include "CorrectionMemory.h"
+#include "VoiceBandFilter.h"
 
 #include "mediaCapture/Microphone.h"
 struct SharedMediaContext;
@@ -22,7 +23,10 @@ public:
 	void Draw();
 
 	// ターン制御（TurnController）から駆動するための入口
-	float GetCurrentLevel();        // 直近の音声 RMS
+	float GetCurrentLevel();        // 直近の発話帯域 RMS（VAD 用。バンドパス有効時は声帯域のみ）
+	float GetBroadbandLevel();      // 直近の広帯域 RMS（表示・比較用）
+	void SetVoiceBandEnabled(bool e) { voiceBandEnabled_ = e; }
+	bool IsVoiceBandEnabled() const { return voiceBandEnabled_; }
 	bool IsCapturing() const;       // マイクキャプチャ中か
 	void ClearAudioBuffer();        // 発話開始時に蓄積をクリア
 	void RequestTranscribe();       // 発話終了時に非同期転写を開始（モデル要ロード）
@@ -35,9 +39,14 @@ private:
 	int selectedMicDevice_ = 0;
 
 	std::mutex audioMutex_;
-	float currentAudioLevel_ = 0.0f;
+	float currentAudioLevel_ = 0.0f;   // 広帯域 RMS（表示用）
+	float voiceBandLevel_ = 0.0f;      // 声帯域バンドパス後の RMS（VAD 用）
 	float peakAudioLevel_ = 0.0f;
 	std::string recordFilePath_ = "recorded.wav";
+
+	// 声帯域バンドパス（約 300-3400Hz）。雑音を落として小声と分離するため。
+	VoiceBandFilter voiceBandFilter_;  // オーディオコールバックスレッド専用
+	bool voiceBandEnabled_ = true;
 
 	std::unique_ptr<WhisperTranscriber> transcriber_;
 	std::string whisperModelPath_ = "application/resource/whisper/ggml-large-v3.bin";
