@@ -3,6 +3,7 @@
 #include "EmotionTag.h"
 #include "WebAction.h"
 #include "LongTermMemory.h"
+#include "LocalLLM.h"
 #include "system/action/ActionPipeline.h"
 
 #define ENGINE_INCLUDE
@@ -194,7 +195,10 @@ static bool ContainsSummaryKeyword(const std::string& text) {
 }
 
 void GatekeeperManager::Dispatch(const RouteDecision& dec, double now) {
-    if (!ctx_ || ctx_->config.apiKey.empty() || llmBusy_) return;
+    if (!ctx_ || llmBusy_) return;
+
+    const bool useLocal = config_.useLocalLLM && localLLM_ && localLLM_->IsModelLoaded();
+    if (!useLocal && ctx_->config.apiKey.empty()) return; // クラウドは API キー必須
 
     std::string systemPrompt = ctx_->config.llmSystemPrompt;
 
@@ -215,18 +219,28 @@ void GatekeeperManager::Dispatch(const RouteDecision& dec, double now) {
         }
     }
 
+    std::string prompt = dec.prompt;
+    if (hasMic && !ctx_->transcribedText.empty()) {
+        prompt += "\n\n\xE3\x83\xA6\xE3\x83\xBC\xE3\x82\xB6\xE3\x83\xBC\xE3\x81\xAE\xE7\x99\xBA\xE8\xA9\xB1: "; // ユーザーの発話:
+        prompt += ctx_->transcribedText;
+    }
+
+    if (useLocal) {
+        // ローカル LLM（MemoryPanel の共有インスタンス）で生成。<think> 除去・/no_think は LocalLLM 側で処理。
+        std::vector<LocalChatMessage> msgs = { {"user", prompt} };
+        localFuture_ = localLLM_->GenerateChatStreamAsync(systemPrompt, msgs, nullptr);
+        llmBusy_      = true;
+        lastEscalate_ = now;
+        return;
+    }
+
+    // クラウド (Claude)
     llm_.SetApiKey(ctx_->config.apiKey);
     llm_.SetSystemPrompt(systemPrompt);
 
     bool needSummary = (dec.target == RouteTarget::WebSearch)
                        && ContainsSummaryKeyword(ctx_->transcribedText);
     llm_.SetEnableWebSearch(needSummary);
-
-    std::string prompt = dec.prompt;
-    if (hasMic && !ctx_->transcribedText.empty()) {
-        prompt += "\n\n\xE3\x83\xA6\xE3\x83\xBC\xE3\x82\xB6\xE3\x83\xBC\xE3\x81\xAE\xE7\x99\xBA\xE8\xA9\xB1: "; // ユーザーの発話:
-        prompt += ctx_->transcribedText;
-    }
 
     llm_.ClearHistory();
     llm_.AddMessage("user", prompt);
@@ -237,7 +251,28 @@ void GatekeeperManager::Dispatch(const RouteDecision& dec, double now) {
 }
 
 void GatekeeperManager::PollLlm() {
-    if (!llmBusy_ || !llmFuture_.valid()) return;
+    if (!llmBusy_) return;
+
+    // ローカル LLM の完了
+    if (localFuture_.valid()) {
+        if (localFuture_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+        std::string content = localFuture_.get();
+        llmBusy_ = false;
+        lastResponse_ = content;
+        if (!content.empty()) {
+            auto actions = ParseWebActions(content);
+            if (!actions.empty()) {
+                ExecuteWebActions(actions, longTermMemory_);
+            }
+            if (config_.autoSpeak) {
+                Speak(StripWebActions(content));
+            }
+        }
+        return;
+    }
+
+    // クラウド (Claude) の完了
+    if (!llmFuture_.valid()) return;
     if (llmFuture_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
 
     LLMResponse resp = llmFuture_.get();
@@ -285,6 +320,33 @@ void GatekeeperManager::EscalateLatest() {
             return;
         }
     }
+
+    Dispatch(dec, now);
+}
+
+void GatekeeperManager::RespondToSpeech() {
+    if (!ctx_ || ctx_->transcribedText.empty() || llmBusy_) return;
+    double now = NowSec();
+
+    // 発話区間検出で確定した発話なので、キーワード/クールダウンは課さず会話として応答する
+    RouteDecision dec;
+    dec.target = RouteTarget::Conversation;
+    dec.sources = { GateSource::Mic };
+    dec.time = now;
+
+    // ローカルで処理できるアクションは先に試す（API コール不要）
+    if (longTermMemory_ && actionPipeline_) {
+        auto actionResult = actionPipeline_->Process(ctx_->transcribedText, longTermMemory_, embedding_);
+        if (actionResult.handled) {
+            lastResponse_ = actionResult.spokenText;
+            lastEscalate_ = now;
+            if (config_.autoSpeak) Speak(actionResult.spokenText);
+            return;
+        }
+    }
+
+    decisions_.push_back(dec);
+    if (decisions_.size() > 20) decisions_.erase(decisions_.begin());
 
     Dispatch(dec, now);
 }

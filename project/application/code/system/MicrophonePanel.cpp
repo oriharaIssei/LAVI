@@ -42,16 +42,37 @@ void MicrophonePanel::Initialize(SharedMediaContext* ctx) {
 
     microphone_->SetDataCallback(
         [this](const float* data, uint32_t frameCount, uint32_t channels) {
+            if (channels == 0 || frameCount == 0) return;
+            const uint32_t totalSamples = frameCount * channels;
+
+            // 広帯域 RMS（表示・比較用）
             float rms = 0.0f;
-            uint32_t totalSamples = frameCount * channels;
             for (uint32_t i = 0; i < totalSamples; ++i) {
                 rms += data[i] * data[i];
             }
             rms = std::sqrt(rms / static_cast<float>(totalSamples));
 
+            // 声帯域バンドパス後の RMS（VAD 用）。チャンネルはモノにダウンミックスしてから濾波。
+            float voiceRms = rms;
+            if (voiceBandEnabled_) {
+                voiceBandFilter_.Configure(static_cast<float>(microphone_->GetFormat().sampleRate));
+                float acc = 0.0f;
+                for (uint32_t f = 0; f < frameCount; ++f) {
+                    float mono = 0.0f;
+                    for (uint32_t c = 0; c < channels; ++c) {
+                        mono += data[f * channels + c];
+                    }
+                    mono /= static_cast<float>(channels);
+                    const float y = voiceBandFilter_.Process(mono);
+                    acc += y * y;
+                }
+                voiceRms = std::sqrt(acc / static_cast<float>(frameCount));
+            }
+
             {
                 std::lock_guard<std::mutex> lock(audioMutex_);
                 currentAudioLevel_ = rms;
+                voiceBandLevel_ = voiceRms;
                 if (rms > peakAudioLevel_) {
                     peakAudioLevel_ = rms;
                 }
@@ -144,6 +165,77 @@ void MicrophonePanel::Finalize() {
     microphone_.reset();
 }
 
+void MicrophonePanel::Update() {
+    if (!transcriber_) return;
+
+    // 転写完了の取り込み（完了後に自動で LLM 校正を開始）
+    if (isTranscribing_ && transcribeFuture_.valid() &&
+        transcribeFuture_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        if (transcribeFuture_.get()) {
+            detailedResult_ = transcriber_->GetDetailedResult();
+            ctx_->transcribedText = detailedResult_.fullText;
+            rawTranscript_ = detailedResult_.fullText;
+            if (refineEnabled_) {
+                StartRefine(rawTranscript_);
+            }
+        }
+        isTranscribing_ = false;
+    }
+
+    // 校正完了の取り込み（成功時のみ transcribedText を校正後に差し替え）
+    if (isRefining_ && refineFuture_.valid() &&
+        refineFuture_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        std::string refined = refineFuture_.get();
+        if (!refined.empty()) {
+            ctx_->transcribedText = refined;
+            if (learningEnabled_) {
+                correctionMemory_.RecordPair(rawTranscript_, refined);
+                ApplyEffectiveVocabulary();
+                if (!isConsolidating_ && !ctx_->config.apiKey.empty() &&
+                    correctionMemory_.ShouldConsolidate(5)) {
+                    consolidateFuture_ = correctionMemory_.ConsolidateAsync(ctx_->config.apiKey, "");
+                    isConsolidating_ = true;
+                }
+            }
+        }
+        isRefining_ = false;
+    }
+
+    // LLM 集約の完了取り込み（学習結果を反映）
+    if (isConsolidating_ && consolidateFuture_.valid() &&
+        consolidateFuture_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        consolidateFuture_.get();
+        ApplyEffectiveVocabulary();
+        isConsolidating_ = false;
+    }
+}
+
+float MicrophonePanel::GetCurrentLevel() {
+    std::lock_guard<std::mutex> lock(audioMutex_);
+    return voiceBandEnabled_ ? voiceBandLevel_ : currentAudioLevel_;
+}
+
+float MicrophonePanel::GetBroadbandLevel() {
+    std::lock_guard<std::mutex> lock(audioMutex_);
+    return currentAudioLevel_;
+}
+
+bool MicrophonePanel::IsCapturing() const {
+    return microphone_ && microphone_->IsCapturing();
+}
+
+void MicrophonePanel::ClearAudioBuffer() {
+    if (transcriber_) transcriber_->ClearAudio();
+}
+
+void MicrophonePanel::RequestTranscribe() {
+    if (!transcriber_ || !transcriber_->IsModelLoaded() || isTranscribing_) return;
+    isTranscribing_ = true;
+    transcribeFuture_ = std::async(std::launch::async, [this]() {
+        return transcriber_->Transcribe();
+    });
+}
+
 void MicrophonePanel::Draw() {
     ImGui::Text("Devices: %d", static_cast<int>(micDevices_.size()));
     ImGui::Separator();
@@ -200,6 +292,9 @@ void MicrophonePanel::Draw() {
         ImGui::ProgressBar(displayLevel, ImVec2(-1, 0), "");
 
         ImGui::Text("RMS: %.6f / Peak: %.6f", currentAudioLevel_, peakAudioLevel_);
+        ImGui::Text("VoiceBand RMS: %.6f  (VAD %s)", voiceBandLevel_,
+                    voiceBandEnabled_ ? "ON" : "OFF");
+        ImGui::Checkbox("Voice Band-pass (300-3400Hz)", &voiceBandEnabled_);
         if (ImGui::Button("Reset Peak")) {
             peakAudioLevel_ = 0.0f;
         }
@@ -317,58 +412,11 @@ void MicrophonePanel::Draw() {
             ImGui::TextDisabled("校正のたびに固有名詞・誤り傾向を学習し、語彙と校正例に自動反映します");
         }
 
-        if (isTranscribing_ && transcribeFuture_.valid() &&
-            transcribeFuture_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-            if (transcribeFuture_.get()) {
-                detailedResult_ = transcriber_->GetDetailedResult();
-                ctx_->transcribedText = detailedResult_.fullText;
-                rawTranscript_ = detailedResult_.fullText;
-                // 転写直後に自動で LLM 校正を開始（トグル ON 時）
-                if (refineEnabled_) {
-                    StartRefine(rawTranscript_);
-                }
-            }
-            isTranscribing_ = false;
-        }
-
-        // 校正完了を取り込む（成功時のみ transcribedText を校正後に差し替え）
-        if (isRefining_ && refineFuture_.valid() &&
-            refineFuture_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-            std::string refined = refineFuture_.get();
-            if (!refined.empty()) {
-                ctx_->transcribedText = refined;
-
-                // 自己進化: 校正ペアを学習し、語彙/ルールを即反映
-                if (learningEnabled_) {
-                    correctionMemory_.RecordPair(rawTranscript_, refined);
-                    ApplyEffectiveVocabulary();
-
-                    // 蓄積がたまったら LLM で一括集約（多重起動は避ける）
-                    if (!isConsolidating_ && !ctx_->config.apiKey.empty() &&
-                        correctionMemory_.ShouldConsolidate(5)) {
-                        consolidateFuture_ = correctionMemory_.ConsolidateAsync(ctx_->config.apiKey, "");
-                        isConsolidating_ = true;
-                    }
-                }
-            }
-            isRefining_ = false;
-        }
-
-        // LLM 集約の完了を取り込む（学習結果を反映）
-        if (isConsolidating_ && consolidateFuture_.valid() &&
-            consolidateFuture_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-            consolidateFuture_.get();
-            ApplyEffectiveVocabulary();
-            isConsolidating_ = false;
-        }
-
+        // 非同期処理（転写/校正/集約）の完了取り込みは Update() で毎フレーム行う
         bool canTranscribe = microphone_->IsCapturing() && !isTranscribing_;
         if (!canTranscribe) ImGui::BeginDisabled();
         if (ImGui::Button("Transcribe")) {
-            isTranscribing_ = true;
-            transcribeFuture_ = std::async(std::launch::async, [this]() {
-                return transcriber_->Transcribe();
-            });
+            RequestTranscribe();
         }
         if (!canTranscribe) ImGui::EndDisabled();
 

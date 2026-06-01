@@ -1,0 +1,9 @@
+{
+  "bargeInEnabled": true,
+  "bargeInMs": 300.0,
+  "enabled": true,
+  "endThreshold": 0.012000000104308128,
+  "minSpeechMs": 200.0,
+  "silenceHangoverMs": 800.0,
+  "startThreshold": 0.011300000362098217
+}

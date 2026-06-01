@@ -2,6 +2,9 @@
 
 #include "system/ISystem.h"
 
+#include "TurnController.h"
+
+#include <chrono>
 #include <memory>
 
 struct SharedMediaContext;
@@ -46,4 +49,13 @@ private:
 
     bool hotkeyRegistered_ = false;
     std::string lastWakeWordText_;
+
+    // 発話区間検出・ターン制御
+    std::unique_ptr<TurnController> turnController_;
+    std::chrono::steady_clock::time_point lastTurnTick_{};
+    std::chrono::steady_clock::time_point processingSince_{};
+    bool prevSpeaking_ = false;
+    bool processingActive_ = false;
+    std::string lastTurnTranscript_; // GateKeeper へ自動送信済みの発話（重複送信防止）
+    void DrawTurnControlUI();
 };
