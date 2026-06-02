@@ -18,7 +18,10 @@ class GatekeeperManager;
 class GatekeeperPanel;
 class MemoryPanel;
 class SentenceEmbedding;
+class KnowledgeBase;
+class WebSearchClient;
 class ActionPipeline;
+class LocationProvider;
 
 class MediaCaptureDemoSystem
     : public OriGine::ISystem
@@ -45,7 +48,10 @@ private:
     std::unique_ptr<GatekeeperPanel> gkPanel_;
     std::unique_ptr<MemoryPanel> memoryPanel_;
     std::unique_ptr<SentenceEmbedding> embedding_;
+    std::unique_ptr<KnowledgeBase> knowledgeBase_;
+    std::unique_ptr<WebSearchClient> webSearch_;
     std::unique_ptr<ActionPipeline> actionPipeline_;
+    std::unique_ptr<LocationProvider> location_;
 
     bool hotkeyRegistered_ = false;
     std::string lastWakeWordText_;
@@ -58,4 +64,10 @@ private:
     bool processingActive_ = false;
     std::string lastTurnTranscript_; // GateKeeper へ自動送信済みの発話（重複送信防止）
     void DrawTurnControlUI();
+
+    // 知識ベース RAG の管理 UI 用の入力バッファ
+    std::string kbSourceBuf_;
+    std::string kbTextBuf_;
+    std::string kbStatus_;
+    void DrawKnowledgeBaseUI();
 };

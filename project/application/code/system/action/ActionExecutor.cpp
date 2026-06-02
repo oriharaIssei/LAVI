@@ -110,25 +110,43 @@ void ActionExecutor::AutoClickFirstResult(int delayMs) {
     }).detach();
 }
 
-ActionResult ActionExecutor::Execute(const ActionCommand& cmd) {
+ActionResult ActionExecutor::ExecutePlan(const ActionPlan& plan) {
+    ActionResult last;
+    for (const auto& step : plan.steps) {
+        if (!step.tool) continue;
+        ActionResult r = Execute(step.request, *step.tool);
+        if (r.handled) last = r;
+    }
+    return last;
+}
+
+ActionResult ActionExecutor::Execute(const ActionRequest& request, const Tool& tool) {
     ActionResult result;
+    result.serviceName = tool.name;
+    result.query = request.query;
 
-    switch (cmd.type) {
-    case ActionType::OpenUrl:
-    case ActionType::SearchUrl:
-        OpenUrl(cmd.parameter, cmd.browserProcess);
-        AutoClickFirstResult(4000);
-        result.handled = true;
-        result.url = cmd.parameter;
-        break;
-
-    case ActionType::LaunchApplication:
-        result.handled = LaunchApplication(cmd.parameter);
-        if (result.handled) {
-            result.serviceName = cmd.label.empty() ? cmd.parameter : cmd.label;
-        }
-        break;
+    if (tool.IsApp()) {
+        // アプリ起動（verb は open/launch どちらでも起動）
+        result.handled = LaunchApplication(tool.exe.empty() ? tool.name : tool.exe);
+        return result;
     }
 
+    // web ツール
+    std::string url;
+    if (request.verb == "search" && !tool.searchUrlTemplate.empty() && !request.query.empty()) {
+        url = ToolRegistry::BuildSearchUrl(tool, request.query);
+    } else if (!request.query.empty() && !tool.searchUrlTemplate.empty()) {
+        // open でもクエリがあれば検索として扱う（「youtubeで猫」等）
+        url = ToolRegistry::BuildSearchUrl(tool, request.query);
+    } else {
+        url = tool.openUrl;
+    }
+    if (url.empty()) return result;
+
+    OpenUrl(url);
+    if (request.verb == "search") AutoClickFirstResult(4000);
+    result.handled = true;
+    result.url = url;
     return result;
 }
+

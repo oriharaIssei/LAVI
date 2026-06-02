@@ -1,35 +1,40 @@
 #pragma once
 
 #include "ActionTypes.h"
-#include "IntentExtractor.h"
-#include "CapabilityResolver.h"
-#include "MemoryResolver.h"
+#include "ActionRequest.h"
+#include "ToolRegistry.h"
 #include "ActionPlanner.h"
-#include "ActionQueue.h"
 #include "ActionExecutor.h"
+#include "IntentParser.h"
 
-class LongTermMemory;
-class SentenceEmbedding;
+#include <string>
 
+/// <summary>
+/// Intent-Driven なアクション統合層。
+/// キーワードマッチではなく、LLM が出力した [action:{verb,target,query}] を解釈し、
+/// ToolRegistry で対象を動的解決して Executor が実行する。
+///
+/// 流れ: LLM出力 → IntentParser → ActionRequest[] → Planner → Executor(ToolRegistry解決)
+/// </summary>
 class ActionPipeline {
 public:
-    bool LoadConfig(const std::string& tagAxesPath);
+    bool LoadConfig(const std::string& toolsJsonPath); // ToolRegistry をロード
 
-    ActionResult Process(const std::string& speech,
-                         LongTermMemory* memory,
-                         SentenceEmbedding* embedding = nullptr);
+    // LLM へ渡すツール使用指示（system プロンプトに付与）。利用可能ツール一覧を含む。
+    std::string BuildToolPrompt() const;
 
-    bool ContainsActionKeyword(const std::string& text) const;
+    // LLM 出力中の [action:...] を解釈し、計画（ActionPlan）を組んで実行する。最後の結果を返す。
+    ActionResult ParseAndExecute(const std::string& llmOutput);
 
-    const IntentExtractor& GetIntentExtractor() const { return extractor_; }
+    // 発話・表示用に [action:...] タグを除去する。
+    static std::string StripActionTags(const std::string& text) { return ActionIntent::Strip(text); }
 
-    // TODO: expose queue for GUI Agent multi-step actions
+    const ToolRegistry& Registry() const { return registry_; }
+    const std::string& LastPlanSummary() const { return lastPlanSummary_; } // 直近に実行した計画の説明
 
 private:
-    IntentExtractor extractor_;
-    CapabilityResolver capabilityResolver_;
-    MemoryResolver memoryResolver_;
+    ToolRegistry  registry_;
     ActionPlanner planner_;
     ActionExecutor executor_;
-    ActionQueue queue_;
+    std::string   lastPlanSummary_;
 };

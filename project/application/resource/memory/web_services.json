@@ -1,6 +1,6 @@
 [
-  {"serviceName":"YouTube","browser":"brave.exe","tags":["娯楽","動画","音楽","閲覧"],"totalMinutes":21.4236,"visitCount":72,"firstVisited":"2026-05-23 21:03","lastVisited":"2026-06-01 08:12"},
-  {"serviceName":"Twitter/X","browser":"brave.exe","tags":["交流","テキスト","発信"],"totalMinutes":54.792,"visitCount":43,"firstVisited":"2026-05-23 21:07","lastVisited":"2026-06-01 08:11"},
+  {"serviceName":"YouTube","browser":"brave.exe","tags":["娯楽","動画","音楽","閲覧"],"totalMinutes":57.9021,"visitCount":91,"firstVisited":"2026-05-23 21:03","lastVisited":"2026-06-02 14:06"},
+  {"serviceName":"Twitter/X","browser":"brave.exe","tags":["交流","テキスト","発信"],"totalMinutes":79.6447,"visitCount":62,"firstVisited":"2026-05-23 21:07","lastVisited":"2026-06-02 14:11"},
   {"serviceName":"はてな","browser":"brave.exe","tags":[],"totalMinutes":0,"visitCount":1,"firstVisited":"2026-05-24 09:23","lastVisited":"2026-05-24 09:23"},
   {"serviceName":"GitHub","browser":"brave.exe","tags":["開発","コード","作業"],"totalMinutes":0.402646,"visitCount":10,"firstVisited":"2026-05-24 09:23","lastVisited":"2026-05-24 19:09"},
   {"serviceName":"Qiita","browser":"brave.exe","tags":[],"totalMinutes":0,"visitCount":2,"firstVisited":"2026-05-24 09:23","lastVisited":"2026-05-24 09:23"},
@@ -8,5 +8,7 @@
   {"serviceName":"note","browser":"brave.exe","tags":[],"totalMinutes":0,"visitCount":2,"firstVisited":"2026-05-24 09:23","lastVisited":"2026-05-24 09:23"},
   {"serviceName":"Claude","browser":"brave.exe","tags":["開発","テキスト","対話"],"totalMinutes":1.21089,"visitCount":5,"firstVisited":"2026-05-24 09:38","lastVisited":"2026-06-01 08:06"},
   {"serviceName":"ChatGPT","browser":"chrome.exe","tags":["開発","テキスト","対話"],"totalMinutes":0.608026,"visitCount":6,"firstVisited":"2026-05-25 10:35","lastVisited":"2026-05-25 11:21"},
-  {"serviceName":"Zenn","browser":"brave.exe","tags":[],"totalMinutes":0,"visitCount":5,"firstVisited":"2026-05-28 14:24","lastVisited":"2026-05-28 14:24"}
+  {"serviceName":"Zenn","browser":"brave.exe","tags":[],"totalMinutes":0,"visitCount":5,"firstVisited":"2026-05-28 14:24","lastVisited":"2026-05-28 14:24"},
+  {"serviceName":"Amazon","browser":"chrome.exe","tags":[],"totalMinutes":0.2025,"visitCount":1,"firstVisited":"2026-06-01 13:36","lastVisited":"2026-06-01 13:36"},
+  {"serviceName":"Gmail","browser":"chrome.exe","tags":[],"totalMinutes":0.040235,"visitCount":1,"firstVisited":"2026-06-02 14:04","lastVisited":"2026-06-02 14:04"}
 ]

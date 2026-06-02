@@ -1,113 +1,92 @@
 #include "ActionPlanner.h"
 
-#include <cstdio>
+#include <cctype>
+#include <sstream>
 
 namespace {
 
-struct ServiceUrl {
-    const char* name;
-    const char* searchFmt;
-};
-
-static const ServiceUrl kServiceUrls[] = {
-    {"YouTube",       "https://www.youtube.com/results?search_query=%s"},
-    {"Spotify",       "https://open.spotify.com/search/%s"},
-    {"niconico",      "https://www.nicovideo.jp/search/%s"},
-    {"Twitch",        "https://www.twitch.tv/search?term=%s"},
-    {"Twitter/X",     "https://x.com/search?q=%s"},
-    {"GitHub",        "https://github.com/search?q=%s"},
-    {"Amazon",        "https://www.amazon.co.jp/s?k=%s"},
-    {"Qiita",         "https://qiita.com/search?q=%s"},
-    {"Zenn",          "https://zenn.dev/search?q=%s"},
-    {"note",          "https://note.com/search?q=%s"},
-    {"StackOverflow", "https://stackoverflow.com/search?q=%s"},
-    {"Reddit",        "https://www.reddit.com/search/?q=%s"},
-    {"Wikipedia",     "https://ja.wikipedia.org/w/index.php?search=%s"},
-    {"Pixiv",         "https://www.pixiv.net/tags/%s"},
-    {"Google",        "https://www.google.com/search?q=%s"},
-};
-
-std::string UrlEncode(const std::string& s) {
-    std::string out;
-    out.reserve(s.size() * 3);
-    for (unsigned char c : s) {
-        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
-            (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~') {
-            out += static_cast<char>(c);
-        } else {
-            char buf[4];
-            std::snprintf(buf, sizeof(buf), "%%%02X", c);
-            out += buf;
-        }
-    }
-    return out;
+std::string Lower(std::string s) {
+    for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return s;
 }
 
-std::string FormatSearchUrl(const char* fmt, const std::string& query) {
-    std::string encoded = UrlEncode(query);
-    std::string url;
-    for (const char* p = fmt; *p; ++p) {
-        if (*p == '%' && *(p + 1) == 's') {
-            url += encoded;
-            ++p;
-        } else {
-            url += *p;
-        }
-    }
-    return url;
+std::string Trim(const std::string& s) {
+    const size_t b = s.find_first_not_of(" \t\r\n");
+    if (b == std::string::npos) return std::string();
+    const size_t e = s.find_last_not_of(" \t\r\n");
+    return s.substr(b, e - b + 1);
 }
 
-const char* FindSearchUrl(const std::string& name) {
-    for (auto& su : kServiceUrls) {
-        if (name == su.name) return su.searchFmt;
-    }
-    return nullptr;
+std::string NormalizeVerb(const std::string& raw) {
+    const std::string v = Lower(Trim(raw));
+    if (v == "play" || v == "watch" || v == "listen") return "search";
+    if (v == "run" || v == "start" || v == "launch")  return "launch";
+    if (v == "open" || v == "go")                      return "open";
+    if (v == "search" || v == "find")                  return "search";
+    return v.empty() ? "open" : v;
+}
+
+bool SameRequest(const ActionRequest& a, const ActionRequest& b) {
+    return a.verb == b.verb && a.target == b.target && a.query == b.query;
 }
 
 } // namespace
 
-std::vector<ActionCommand> ActionPlanner::Plan(
-    const IntentResult& intent,
-    const CapabilityResult& capability,
-    const UserPreference& preference,
-    const std::string& serviceName,
-    const std::vector<std::string>& keywords) const {
+ActionPlan ActionPlanner::Build(const std::vector<ActionRequest>& requests,
+                                const ToolRegistry& registry) const {
+    ActionPlan plan;
+    const Tool* fallback = registry.Find("google");
 
-    std::vector<ActionCommand> commands;
+    for (const auto& raw : requests) {
+        if (static_cast<int>(plan.steps.size()) >= maxSteps) break;
 
-    if (capability.type == CapabilityType::ApplicationLaunch) {
-        std::string target = intent.targetName.empty() ? intent.query : intent.targetName;
-        if (target.empty()) return commands;
+        ActionRequest req;
+        req.verb   = NormalizeVerb(raw.verb);
+        req.target = Trim(raw.target);
+        req.query  = Trim(raw.query);
+        if (!req.IsValid()) continue;
 
-        ActionCommand cmd;
-        cmd.type = ActionType::LaunchApplication;
-        cmd.parameter = target;
-        cmd.label = intent.query.empty() ? target : intent.query;
-        commands.push_back(std::move(cmd));
-        return commands;
+        const Tool* tool = registry.Find(req.target);
+        if (!tool) {
+            // 未知ツール → Google 検索フォールバック（target+query を検索語に）
+            if (!fallback) continue;
+            std::string q = req.target;
+            if (!req.query.empty()) { if (!q.empty()) q += " "; q += req.query; }
+            req.verb  = "search";
+            req.query = q;
+            req.target = fallback->name;
+            tool = fallback;
+        }
+
+        // 連続する同一要求は除外（同じタブを二重に開かない）
+        if (!plan.steps.empty() && SameRequest(plan.steps.back().request, req) &&
+            plan.steps.back().tool == tool) {
+            continue;
+        }
+
+        ActionStep step;
+        step.request = std::move(req);
+        step.tool = tool;
+        plan.steps.push_back(std::move(step));
     }
 
-    std::string query;
-    for (auto& kw : keywords) {
-        if (!query.empty()) query += " ";
-        query += kw;
+    return plan;
+}
+
+std::string ActionPlan::Describe() const {
+    std::ostringstream os;
+    for (size_t i = 0; i < steps.size(); ++i) {
+        const ActionStep& s = steps[i];
+        if (i) os << "\xe3\x80\x81"; // 、
+        const std::string& name = s.tool ? s.tool->name : s.request.target;
+        if (s.tool && s.tool->IsApp()) {
+            os << name << "\xe3\x82\x92\xe8\xb5\xb7\xe5\x8b\x95"; // を起動
+        } else if (s.request.verb == "search" || !s.request.query.empty()) {
+            os << name << "\xe3\x81\xa7\xe3\x80\x8c" << s.request.query
+               << "\xe3\x80\x8d\xe3\x82\x92\xe6\xa4\x9c\xe7\xb4\xa2"; // で「query」を検索
+        } else {
+            os << name << "\xe3\x82\x92\xe9\x96\x8b\xe3\x81\x8f"; // を開く
+        }
     }
-
-    if (intent.type == IntentType::PlayMusic && !query.empty()) {
-        query += " MIX";
-    }
-    if (query.empty()) query = "trending";
-
-    const char* urlFmt = FindSearchUrl(serviceName);
-    if (!urlFmt) urlFmt = FindSearchUrl("Google");
-    if (!urlFmt) return commands;
-
-    ActionCommand cmd;
-    cmd.type = ActionType::SearchUrl;
-    cmd.parameter = FormatSearchUrl(urlFmt, query);
-    cmd.browserProcess = preference.preferredBrowser;
-    cmd.label = serviceName + ": " + query;
-
-    commands.push_back(std::move(cmd));
-    return commands;
+    return os.str();
 }

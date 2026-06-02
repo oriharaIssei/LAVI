@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <chrono>
 #include <future>
 #include <memory>
@@ -12,7 +13,10 @@
 struct SharedMediaContext;
 class MemoryPanel;
 class SentenceEmbedding;
+class KnowledgeBase;
 class ActionPipeline;
+class WebSearchClient;
+class LocationProvider;
 
 class LLMChatPanel {
 public:
@@ -20,6 +24,8 @@ public:
     void SetMemoryPanel(MemoryPanel* memPanel);
     void SetSentenceEmbedding(SentenceEmbedding* emb) { embedding_ = emb; }
     void SetActionPipeline(ActionPipeline* pipeline) { actionPipeline_ = pipeline; }
+    void SetWebSearch(WebSearchClient* ws) { webSearch_ = ws; } // 時事Web検索（共有。所有しない）
+    void SetLocation(LocationProvider* lp) { location_ = lp; }  // 現在地（共有。所有しない）
     void Finalize();
     void Draw();
 
@@ -53,6 +59,9 @@ private:
 
     bool llmAttachAppInfo_ = false;
     bool llmEnableWebSearch_ = false;
+    // この応答が「検索して答える」モードか。true の間は [browser:]/[action:] を実行せず除去する
+    // （情報回答中に動画再生などのアクションが暴発するのを防ぐ）。
+    std::atomic<bool> suppressActionsForResponse_{false};
 
     std::string speechTagBuf_;
     bool inActionTag_ = false;
@@ -76,4 +85,6 @@ private:
     bool useMemoryContext_ = true;
     SentenceEmbedding* embedding_ = nullptr;
     ActionPipeline* actionPipeline_ = nullptr;
+    WebSearchClient* webSearch_ = nullptr;
+    LocationProvider* location_ = nullptr;
 };

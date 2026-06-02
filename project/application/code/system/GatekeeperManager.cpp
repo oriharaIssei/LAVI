@@ -3,6 +3,8 @@
 #include "EmotionTag.h"
 #include "WebAction.h"
 #include "LongTermMemory.h"
+#include "KnowledgeBase.h"
+#include "WebSearchClient.h"
 #include "LocalLLM.h"
 #include "system/action/ActionPipeline.h"
 
@@ -163,20 +165,7 @@ void GatekeeperManager::FlushPending(double now) {
     // 自動エスカレーション
     if (config_.autoEscalate && !llmBusy_ && (now - lastEscalate_ >= config_.escalateCooldown)) {
         auto& latest = decisions_.back();
-
-        // ActionPipeline でローカル処理を試みる (APIコール不要)
-        if (latest.target == RouteTarget::WebSearch && ctx_ && longTermMemory_ && actionPipeline_) {
-            auto actionResult = actionPipeline_->Process(ctx_->transcribedText, longTermMemory_, embedding_);
-            if (actionResult.handled) {
-                lastResponse_ = actionResult.spokenText;
-                lastEscalate_ = now;
-                if (config_.autoSpeak) {
-                    Speak(actionResult.spokenText);
-                }
-                return;
-            }
-        }
-
+        // 行動判断は LLM が [action:...] タグで行う（キーワード事前判定は廃止）。
         Dispatch(latest, now);
     }
 }
@@ -212,10 +201,24 @@ void GatekeeperManager::Dispatch(const RouteDecision& dec, double now) {
         systemPrompt += GetWebActionPrompt();
     }
 
+    // Intent-Driven アクション: LLM が [action:{verb,target,query}] でアプリ/サービスを操作できる。
+    if (hasMic && actionPipeline_ && !actionPipeline_->Registry().Empty()) {
+        systemPrompt += "\n\n";
+        systemPrompt += actionPipeline_->BuildToolPrompt();
+    }
+
     if (longTermMemory_) {
         std::string memCtx = longTermMemory_->BuildCompactContext(ctx_->transcribedText);
         if (!memCtx.empty()) {
             systemPrompt += "\n\n" + memCtx;
+        }
+    }
+
+    // 知識ベース RAG: 一般知識を関連チャンクとして注入（個人の事実=記憶 と併用）。
+    if (knowledgeBase_ && knowledgeBase_->IsReady() && !ctx_->transcribedText.empty()) {
+        std::string kbCtx = knowledgeBase_->BuildContext(ctx_->transcribedText);
+        if (!kbCtx.empty()) {
+            systemPrompt += "\n\n" + kbCtx;
         }
     }
 
@@ -225,10 +228,43 @@ void GatekeeperManager::Dispatch(const RouteDecision& dec, double now) {
         prompt += ctx_->transcribedText;
     }
 
+    // 時事対策: 鮮度が要るクエリを検出。ローカルはアプリ側 fetch で文脈注入、
+    // クラウドは Claude 内蔵 web_search を有効化する。
+    const bool needsFresh = config_.useWebContext && webSearch_ && webSearch_->IsEnabled()
+                            && webSearch_->NeedsFreshInfo(ctx_->transcribedText);
+
     if (useLocal) {
         // ローカル LLM（MemoryPanel の共有インスタンス）で生成。<think> 除去・/no_think は LocalLLM 側で処理。
         std::vector<LocalChatMessage> msgs = { {"user", prompt} };
-        localFuture_ = localLLM_->GenerateChatStreamAsync(systemPrompt, msgs, nullptr);
+        const bool toolEnabled = config_.useWebContext && webSearch_ && webSearch_->IsEnabled();
+        if (toolEnabled) {
+            // モデル主導の tool use: モデルが [search:...] を出したら検索→結果を戻して再生成。
+            // Web 取得はブロッキングのため生成ごとバックグラウンドスレッドで実行する。
+            const std::string baseSp     = systemPrompt;
+            const std::string userPrompt = prompt;
+            localFuture_ = std::async(std::launch::async, [this, baseSp, userPrompt]() {
+                const std::string sp = baseSp + "\n\n" + WebSearchClient::ToolPrompt();
+                std::vector<LocalChatMessage> r1 = { {"user", userPrompt} };
+                std::string out = localLLM_->GenerateChatStreamAsync(sp, r1, nullptr).get();
+
+                const std::string q = WebSearchClient::ParseSearchQuery(out);
+                if (!q.empty()) {
+                    const std::string results = webSearch_->BuildContext(q);
+                    const std::string feedback = results.empty()
+                        ? std::string("（検索結果は取得できませんでした。手持ちの知識で簡潔に答えてください。）")
+                        : (results + "\n上記の検索結果を踏まえて、ユーザーに自然な口調で回答してください。");
+                    std::vector<LocalChatMessage> r2 = {
+                        { "user", userPrompt },
+                        { "assistant", out },
+                        { "user", feedback },
+                    };
+                    out = localLLM_->GenerateChatStreamAsync(sp, r2, nullptr).get();
+                }
+                return WebSearchClient::StripSearchTags(out);
+            });
+        } else {
+            localFuture_ = localLLM_->GenerateChatStreamAsync(systemPrompt, msgs, nullptr);
+        }
         llmBusy_      = true;
         lastEscalate_ = now;
         return;
@@ -240,7 +276,7 @@ void GatekeeperManager::Dispatch(const RouteDecision& dec, double now) {
 
     bool needSummary = (dec.target == RouteTarget::WebSearch)
                        && ContainsSummaryKeyword(ctx_->transcribedText);
-    llm_.SetEnableWebSearch(needSummary);
+    llm_.SetEnableWebSearch(needSummary || needsFresh);
 
     llm_.ClearHistory();
     llm_.AddMessage("user", prompt);
@@ -264,8 +300,10 @@ void GatekeeperManager::PollLlm() {
             if (!actions.empty()) {
                 ExecuteWebActions(actions, longTermMemory_);
             }
+            // Intent-Driven アクション（[action:...]）を実行
+            if (actionPipeline_) actionPipeline_->ParseAndExecute(content);
             if (config_.autoSpeak) {
-                Speak(StripWebActions(content));
+                Speak(ActionPipeline::StripActionTags(StripWebActions(content)));
             }
         }
         return;
@@ -283,8 +321,9 @@ void GatekeeperManager::PollLlm() {
         if (!actions.empty()) {
             ExecuteWebActions(actions, longTermMemory_);
         }
+        if (actionPipeline_) actionPipeline_->ParseAndExecute(resp.content);
         if (config_.autoSpeak) {
-            Speak(StripWebActions(resp.content));
+            Speak(ActionPipeline::StripActionTags(StripWebActions(resp.content)));
         }
     }
 }
@@ -311,16 +350,7 @@ void GatekeeperManager::EscalateLatest() {
     auto& dec = decisions_.back();
     double now = NowSec();
 
-    if (dec.target == RouteTarget::WebSearch && ctx_ && longTermMemory_ && actionPipeline_) {
-        auto actionResult = actionPipeline_->Process(ctx_->transcribedText, longTermMemory_, embedding_);
-        if (actionResult.handled) {
-            lastResponse_ = actionResult.spokenText;
-            lastEscalate_ = now;
-            if (config_.autoSpeak) Speak(actionResult.spokenText);
-            return;
-        }
-    }
-
+    // 行動判断は LLM が [action:...] タグで行う（キーワード事前判定は廃止）。
     Dispatch(dec, now);
 }
 
@@ -334,17 +364,7 @@ void GatekeeperManager::RespondToSpeech() {
     dec.sources = { GateSource::Mic };
     dec.time = now;
 
-    // ローカルで処理できるアクションは先に試す（API コール不要）
-    if (longTermMemory_ && actionPipeline_) {
-        auto actionResult = actionPipeline_->Process(ctx_->transcribedText, longTermMemory_, embedding_);
-        if (actionResult.handled) {
-            lastResponse_ = actionResult.spokenText;
-            lastEscalate_ = now;
-            if (config_.autoSpeak) Speak(actionResult.spokenText);
-            return;
-        }
-    }
-
+    // 行動（アプリ/サービス操作）は LLM が [action:...] タグで判断する。キーワード事前判定は廃止。
     decisions_.push_back(dec);
     if (decisions_.size() > 20) decisions_.erase(decisions_.begin());
 

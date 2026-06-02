@@ -1,4 +1,7 @@
 #include "LLMChatPanel.h"
+#include <ctime>
+#include <cstdio>
+#include <fstream>
 #include "SharedMediaContext.h"
 #include "AppConfig.h"
 #include "EmotionTag.h"
@@ -6,6 +9,8 @@
 #include "LocalLLM.h"
 #include "ConversationMemory.h"
 #include "WebAction.h"
+#include "WebSearchClient.h"
+#include "LocationProvider.h"
 #include "LongTermMemory.h"
 #include "SentenceEmbedding.h"
 #include "system/action/ActionPipeline.h"
@@ -210,50 +215,94 @@ void LLMChatPanel::GeneratePersonaPrompt() {
     personaFuture_ = personaClient_->SendAsync();
 }
 
-static bool NeedsSummary(const std::string& text) {
-    static const char* kw[] = {
-        "\xE8\xA6\x81\xE7\xB4\x84", // 要約
-        "\xE3\x81\xBE\xE3\x81\xA8\xE3\x82\x81", // まとめ
-        "\xE8\xAA\xAC\xE6\x98\x8E", // 説明
-        "summary",
-    };
-    for (const auto* w : kw) {
-        if (text.find(w) != std::string::npos) return true;
-    }
-    return false;
+// 一時的な切り分け用トレース。作業ディレクトリに lavi_trace.log を追記する。原因特定後に除去する。
+static void TraceLog(const std::string& msg) {
+    std::ofstream f("lavi_trace.log", std::ios::app);
+    if (!f) return;
+    std::time_t t = std::time(nullptr);
+    std::tm tm{};
+    localtime_s(&tm, &t);
+    char ts[32];
+    std::strftime(ts, sizeof(ts), "%H:%M:%S", &tm);
+    f << ts << " " << msg << "\n";
+}
+
+// ローカルLLM（文脈長有限）向けに、注入テキストを UTF-8 境界で安全に切り詰める。
+static std::string TruncateUtf8(const std::string& s, size_t maxBytes) {
+    if (s.size() <= maxBytes) return s;
+    size_t cut = maxBytes;
+    while (cut > 0 && (static_cast<unsigned char>(s[cut]) & 0xC0) == 0x80) --cut; // 継続バイトの途中で切らない
+    return s.substr(0, cut) + "\n…(検索結果は一部省略)";
+}
+
+// LLM は時計を持たないので、毎ターン現在のローカル日時を文脈に載せる（天気/ニュース等の解釈に必須）。
+static std::string CurrentDateTimeContext() {
+    const auto now = std::chrono::system_clock::now();
+    const std::time_t t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm{};
+    localtime_s(&tm, &t);
+    static const char* kWd[] = { "日", "月", "火", "水", "木", "金", "土" };
+    char buf[128];
+    std::snprintf(buf, sizeof(buf), "## 現在の日時\n%d年%d月%d日(%s) %02d:%02d\n",
+        tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+        kWd[tm.tm_wday & 7], tm.tm_hour, tm.tm_min);
+    return std::string(buf);
 }
 
 void LLMChatPanel::SendLLMRequest(const std::string& text, const std::vector<LLMClient::ImageFrame>& frames, bool playFiller) {
+    suppressActionsForResponse_.store(false); // 既定は通常応答（アクション実行可）
     llmClient_->SetApiKey(ctx_->config.apiKey);
-    llmClient_->SetEnableWebSearch(llmEnableWebSearch_ && NeedsSummary(text));
+    // クラウドは Claude 内蔵 web_search を有効化し、いつ検索するかは Claude に委ねる（LLM主導）。
+    llmClient_->SetEnableWebSearch(llmEnableWebSearch_);
 
     // ペルソナ（固定）と、毎ターン変わる文脈（記憶・Web・アプリ情報）を分けて持つ。
     // クラウドは従来どおり system に全部入れる。ローカルは persona を system に固定し、
     // 変動文脈は最新ユーザー発話に載せる（persona+履歴のKVプレフィックスを再利用＝高速化、かつ記憶は見せる）。
     const std::string personaPrompt = ctx_->config.llmSystemPrompt;
-    std::string volatileContext;
+
+    // 変動文脈を2系統に分ける:
+    //   infoContext   … 日時・現在地・記憶・アプリ情報（情報回答でも常に有用）
+    //   actionContext … ブラウザ/アクションのツール指示（モデルに操作を許す時だけ必要）
+    // forced-search（天気等の情報回答）ではアクションを抑制するので actionContext は載せない。
+    // → 小型ローカルモデルの文脈を節約し、8192 溢れ（空応答）とプレフィル肥大（低速）を防ぐ。
+    std::string infoContext;
+
+    // 現在日時（毎ターン更新。固定 persona ではなく変動文脈側に載せる）。
+    infoContext += "\n\n" + CurrentDateTimeContext();
+
+    // 現在地（取得済みなら注入。未取得/失敗時は空）。
+    if (location_) {
+        const std::string locCtx = location_->BuildContext();
+        if (!locCtx.empty()) infoContext += "\n\n" + locCtx;
+    }
 
     if (useMemoryContext_ && memoryPanel_) {
         std::string memCtx = memoryPanel_->BuildMemoryContext();
         if (!memCtx.empty()) {
-            volatileContext += "\n\n" + memCtx;
+            infoContext += "\n\n" + memCtx;
         }
-    }
-
-    bool hasAction = actionPipeline_ ? actionPipeline_->ContainsActionKeyword(text)
-                                     : ContainsActionKeyword(text);
-    if (llmEnableWebSearch_ || hasAction) {
-        volatileContext += "\n\n";
-        volatileContext += GetWebActionPrompt();
     }
 
     if (llmAttachAppInfo_) {
         auto apps = OriGine::ProcessManager::EnumerateWindows();
         std::string appText = OriGine::ProcessManager::FormatAsText(apps);
         if (!appText.empty()) {
-            volatileContext += "\n\n## 現在ユーザーが開いているアプリケーション\n" + appText;
+            infoContext += "\n\n## 現在ユーザーが開いているアプリケーション\n" + appText;
         }
     }
+
+    std::string actionContext;
+    if (llmEnableWebSearch_) {
+        actionContext += "\n\n";
+        actionContext += GetWebActionPrompt();
+    }
+    // Intent-Driven アクション: LLM が [action:{verb,target,query}] でアプリ/サービスを操作できる。
+    if (actionPipeline_ && !actionPipeline_->Registry().Empty()) {
+        actionContext += "\n\n";
+        actionContext += actionPipeline_->BuildToolPrompt();
+    }
+
+    const std::string volatileContext = infoContext + actionContext; // クラウド/通常ローカル用
 
     std::string systemPrompt = personaPrompt + volatileContext; // クラウド用（従来互換）
     llmClient_->SetSystemPrompt(systemPrompt);
@@ -307,16 +356,100 @@ void LLMChatPanel::SendLLMRequest(const std::string& text, const std::vector<LLM
         for (size_t i = startIdx; i < hist.size(); ++i) {
             msgs.push_back({hist[i].role, hist[i].content});
         }
+        // Web検索（LLM主導＋安全網のハイブリッド）:
+        //  (1) 鮮度キーワード該当（天気/ニュース等）→ モデル判断を待たず確実に検索→注入→回答。
+        //  (2) それ以外 → モデルが「[search: キーワード]」を出したら検索（LLM主導）。
+        //      1パス目は先頭プレフィックス判定でゲートし、通常回答はストリーミング、
+        //      検索タグなら非表示→結果を渡して2パス目で回答する。
+        const bool webSearchActive = llmEnableWebSearch_ && webSearch_ && webSearch_->IsEnabled();
+        const bool willForceSearch = webSearchActive && !msgs.empty() && webSearch_->NeedsFreshInfo(text);
+
         // 記憶・アプリ情報などの変動文脈は「今回のユーザー発話」に載せる。
         // → persona(system) と過去履歴は不変のまま＝KVプレフィックス再利用で高速、かつ記憶は参照される。
-        if (!volatileContext.empty() && !msgs.empty()) {
-            msgs.back().content += "\n\n[参考情報]" + volatileContext;
+        // forced-search はアクション抑制モードなので、ツール指示を省いた infoContext のみ載せる（文脈節約）。
+        const std::string& localCtx = willForceSearch ? infoContext : volatileContext;
+        if (!localCtx.empty() && !msgs.empty()) {
+            msgs.back().content += "\n\n[参考情報]" + localCtx;
         }
         // persona のみを system に（固定）。クラウドと同じストリーミングCBを流用（done は完了時）
         activeStreamCb_ = MakeStreamCallback();
-        localFuture_ = local->GenerateChatStreamAsync(
-            personaPrompt, msgs,
-            [this](const std::string& tok) { activeStreamCb_(tok, false); });
+
+        if (willForceSearch) {
+            // 安全網: 明らかに鮮度が要るクエリ（天気/ニュース/株価等のキーワード該当）は、
+            // モデルが [search:] を出さなくても確実に検索→結果を注入して1パスで回答する。
+            // 現在地が取れていれば地名をクエリ先頭に付ける（「東京都新宿区 今日の天気」のように地域を反映）。
+            std::string query = text;
+            if (location_) {
+                const auto loc = location_->Get();
+                if (loc.valid && !loc.placeName.empty()) query = loc.placeName + " " + text;
+            }
+            suppressActionsForResponse_.store(true); // 情報回答モード: アクションは実行しない
+            TraceLog("forced-search: enter, query=" + query);
+            localFuture_ = std::async(std::launch::async,
+                [this, local, personaPrompt, msgs, query]() mutable {
+                    TraceLog("forced-search: before BuildContext");
+                    std::string ctx = TruncateUtf8(webSearch_->BuildContext(query, 3), 2500); // 文脈溢れ防止
+                    TraceLog("forced-search: after BuildContext, len=" + std::to_string(ctx.size()));
+                    if (!ctx.empty()) {
+                        msgs.back().content += "\n\n" + ctx
+                            + "\n上記の検索結果を踏まえて、ブラウザは開かず、ユーザーに自然な口調でテキストで回答してください。";
+                    }
+                    TraceLog("forced-search: before generate");
+                    std::string r = local->GenerateChatStreamAsync(
+                        personaPrompt, msgs,
+                        [this](const std::string& tok) { activeStreamCb_(tok, false); }).get();
+                    TraceLog("forced-search: after generate, len=" + std::to_string(r.size()));
+                    return r;
+                });
+        } else if (webSearchActive && !msgs.empty()) {
+            // LLM主導: 鮮度キーワードに当たらない微妙なケースは、モデルが [search:] を出したら検索する。
+            // 検索ツールの指示は埋もれないよう system（persona）側に固定で載せる（KVプレフィックス再利用は維持）。
+            const std::string sysWithTool = personaPrompt + "\n\n" + WebSearchClient::ToolPrompt();
+            localFuture_ = std::async(std::launch::async,
+                [this, local, sysWithTool, msgs]() mutable {
+                    // 1パス目: [search: タグの抑制つきストリーミング。
+                    struct Gate { int decided = 0; std::string buf; }; // 0=未確定 1=回答(流す) 2=検索(抑制)
+                    auto gate = std::make_shared<Gate>();
+                    LocalLLMCallback gateCb = [this, gate](const std::string& delta) {
+                        if (gate->decided == 1) { activeStreamCb_(delta, false); return; }
+                        if (gate->decided == 2) { return; }
+                        gate->buf += delta;
+                        const size_t b = gate->buf.find_first_not_of(" \t\r\n");
+                        if (b == std::string::npos) return; // まだ空白のみ→保留
+                        const std::string t = gate->buf.substr(b);
+                        static const std::string key = "[search:";
+                        const size_t cmp = t.size() < key.size() ? t.size() : key.size();
+                        if (t.compare(0, cmp, key, 0, cmp) == 0) {
+                            if (t.size() >= key.size()) gate->decided = 2; // 検索確定→以降抑制
+                            return;                                        // 未確定→保留
+                        }
+                        gate->decided = 1;                 // 通常回答確定
+                        activeStreamCb_(gate->buf, false); // 保留分をまとめて流す
+                        gate->buf.clear();
+                    };
+                    std::string out = local->GenerateChatStreamAsync(sysWithTool, msgs, gateCb).get();
+
+                    const std::string q = WebSearchClient::ParseSearchQuery(out);
+                    if (q.empty()) return WebSearchClient::StripSearchTags(out); // 通常応答（アクション実行可のまま）
+
+                    suppressActionsForResponse_.store(true); // 検索して答えるモード: アクションは実行しない
+                    // 検索 → 結果を渡して2パス目をストリーミング生成。
+                    const std::string results = TruncateUtf8(webSearch_->BuildContext(q, 3), 2500); // 文脈溢れ防止
+                    const std::string feedback = results.empty()
+                        ? std::string("（検索結果は取得できませんでした。手持ちの知識で簡潔に答えてください。）")
+                        : (results + "\n上記の検索結果を踏まえて、ブラウザは開かず、ユーザーに自然な口調でテキストで回答してください。");
+                    std::vector<LocalChatMessage> r2 = msgs;
+                    r2.push_back({ "assistant", out });
+                    r2.push_back({ "user", feedback });
+                    return WebSearchClient::StripSearchTags(
+                        local->GenerateChatStreamAsync(sysWithTool, r2,
+                            [this](const std::string& tok) { activeStreamCb_(tok, false); }).get());
+                });
+        } else {
+            localFuture_ = local->GenerateChatStreamAsync(
+                personaPrompt, msgs,
+                [this](const std::string& tok) { activeStreamCb_(tok, false); });
+        }
     } else {
         llmFuture_ = llmClient_->SendStreamAsync(MakeStreamCallback());
     }
@@ -491,7 +624,9 @@ void LLMChatPanel::Draw() {
                 ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "LAVI:");
                 ImGui::SameLine();
             }
-            std::string display = (msg.role == "assistant") ? StripWebActions(StripEmotionTag(msg.content)) : msg.content;
+            std::string display = (msg.role == "assistant")
+                ? ActionPipeline::StripActionTags(StripWebActions(StripEmotionTag(msg.content)))
+                : msg.content;
             ImGui::TextWrapped("%s", display.c_str());
             ImGui::Spacing();
         }
@@ -502,7 +637,7 @@ void LLMChatPanel::Draw() {
             std::string streamDisplay;
             {
                 std::lock_guard<std::mutex> lock(llmStreamMutex_);
-                streamDisplay = StripWebActions(StripEmotionTag(llmStreamingText_));
+                streamDisplay = ActionPipeline::StripActionTags(StripWebActions(StripEmotionTag(llmStreamingText_)));
             }
             ImGui::TextWrapped("%s", streamDisplay.empty() ? "..." : streamDisplay.c_str());
         }
@@ -527,6 +662,7 @@ void LLMChatPanel::Draw() {
                 LongTermMemory* ltm = memoryPanel_ ? memoryPanel_->GetLongTermMemory() : nullptr;
                 ExecuteWebActions(actions, ltm);
             }
+            if (actionPipeline_) actionPipeline_->ParseAndExecute(lastLLMResponse_.content);
             if (memoryPanel_) {
                 memoryPanel_->GetConversationMemory()->PushMessage("assistant", lastLLMResponse_.content);
             }
@@ -546,12 +682,19 @@ void LLMChatPanel::Draw() {
         lastLLMResponse_.success = !out.empty();
 
         if (!out.empty()) {
-            llmClient_->AddMessage("assistant", out);
-            auto actions = ParseWebActions(out);
-            if (!actions.empty()) {
-                LongTermMemory* ltm = memoryPanel_ ? memoryPanel_->GetLongTermMemory() : nullptr;
-                ExecuteWebActions(actions, ltm);
+            if (suppressActionsForResponse_.load()) {
+                // 検索して答えるモード: 動画再生などの暴発を防ぐため [browser:]/[action:] は実行せず除去。
+                out = ActionPipeline::StripActionTags(StripWebActions(out));
+                lastLLMResponse_.content = out;
+            } else {
+                auto actions = ParseWebActions(out);
+                if (!actions.empty()) {
+                    LongTermMemory* ltm = memoryPanel_ ? memoryPanel_->GetLongTermMemory() : nullptr;
+                    ExecuteWebActions(actions, ltm);
+                }
+                if (actionPipeline_) actionPipeline_->ParseAndExecute(out);
             }
+            llmClient_->AddMessage("assistant", out);
             if (memoryPanel_) {
                 memoryPanel_->GetConversationMemory()->PushMessage("assistant", out);
             }
@@ -652,30 +795,8 @@ void LLMChatPanel::Draw() {
             LearnInterestsFromSpeech(llmUserInput_, memoryPanel_->GetLongTermMemory());
         }
 
-        // ActionPipeline: Intent → Capability → Context → Plan → Execute
-        if (actionPipeline_ && memoryPanel_) {
-            LongTermMemory* ltm = memoryPanel_->GetLongTermMemory();
-            auto actionResult = actionPipeline_->Process(llmUserInput_, ltm, embedding_);
-            if (actionResult.handled) {
-                llmClient_->AddMessage("user", llmUserInput_);
-                llmClient_->AddMessage("assistant", actionResult.spokenText);
-                if (memoryPanel_) {
-                    memoryPanel_->GetConversationMemory()->PushMessage("user", llmUserInput_);
-                    memoryPanel_->GetConversationMemory()->PushMessage("assistant", actionResult.spokenText);
-                    memoryPanel_->NotifyUserMessage(llmUserInput_);
-                }
-                if (llmSpeakResponse_ && ctx_->voiceVox && ctx_->voiceVox->IsEngineReady()
-                    && !ctx_->voiceVoxSpeakers.empty()) {
-                    int speakerId = ctx_->voiceVoxSpeakers[ctx_->selectedSpeaker].id;
-                    synthPipeline_.StartSession(ctx_->voiceVox, speakerId);
-                    synthPipeline_.FeedDelta(actionResult.spokenText);
-                    synthPipeline_.FeedDone();
-                }
-                llmUserInput_.clear();
-                goto done_send;
-            }
-        }
-
+        // 行動（アプリ/サービス操作）は LLM が応答内の [action:...] タグで判断・実行する。
+        // キーワード事前判定は廃止。実行は応答受信時（ParseAndExecute）に行う。
         {
             std::vector<LLMClient::ImageFrame> frames;
 
@@ -695,7 +816,6 @@ void LLMChatPanel::Draw() {
             SendLLMRequest(llmUserInput_, frames, llmPlayFiller_);
             llmUserInput_.clear();
         }
-        done_send:;
     }
 
     if (!canSend) ImGui::EndDisabled();

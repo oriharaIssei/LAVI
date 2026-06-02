@@ -1,60 +1,39 @@
 #include "ActionPipeline.h"
-#include "system/LongTermMemory.h"
 
-bool ActionPipeline::LoadConfig(const std::string& tagAxesPath){
-	return extractor_.LoadConfig(tagAxesPath);
+#include <sstream>
+
+bool ActionPipeline::LoadConfig(const std::string& toolsJsonPath) {
+    return registry_.Load(toolsJsonPath);
 }
 
-ActionResult ActionPipeline::Process(const std::string& speech,
-									 LongTermMemory* memory,
-									 SentenceEmbedding* /*embedding*/){
-	ActionResult finalResult;
-
-	// 1. Intent Extraction
-	IntentResult intent = extractor_.Extract(speech);
-	if(intent.type == IntentType::None) return finalResult;
-
-	// 2. Capability Resolution
-	CapabilityResult capability = capabilityResolver_.Resolve(intent);
-
-	// 3. Memory / Context Resolve
-	UserPreference preference = memoryResolver_.ResolvePreferences(memory);
-	std::string serviceName = memoryResolver_.ResolveService(
-		capability,intent,preference,memory);
-	std::vector<std::string> keywords = memoryResolver_.ResolveQueryKeywords(
-		intent,
-		extractor_.GetInterestCategories(),
-		extractor_.GetSynonyms(),
-		memory);
-
-	// 4. Action Planning
-	auto commands = planner_.Plan(intent,capability,preference,serviceName,keywords);
-
-	// 5. Enqueue
-	queue_.Clear();
-	for(auto& cmd : commands){
-		queue_.Enqueue(std::move(cmd));
-	}
-
-	// 6. Execute
-	while(queue_.HasPending()){
-		auto cmd = queue_.Dequeue();
-		ActionResult stepResult = executor_.Execute(cmd);
-		if(stepResult.handled){
-			finalResult = stepResult;
-			if(!serviceName.empty()){
-				finalResult.serviceName = serviceName;
-			}
-			finalResult.query = cmd.label;
-			const std::string label = cmd.label.empty() ? serviceName : cmd.label;
-			finalResult.spokenText = label +
-				"\xE3\x82\x92\xE9\x96\x8B\xE3\x81\x8F\xE3\x81\xAD"; // を開くね
-		}
-	}
-
-	return finalResult;
+std::string ActionPipeline::BuildToolPrompt() const {
+    std::ostringstream os;
+    // ## ツール（アプリ/サービスの操作）
+    os << "## \xe3\x83\x84\xe3\x83\xbc\xe3\x83\xab\xef\xbc\x88\xe3\x82\xa2\xe3\x83\x97\xe3\x83\xaa/\xe3\x82\xb5\xe3\x83\xbc\xe3\x83\x93\xe3\x82\xb9\xe6\x93\x8d\xe4\xbd\x9c\xef\xbc\x89\n";
+    // ユーザーがアプリやサービスを開く/検索したいときは、回答に次の形式のタグを含めてください。
+    os << "\xe3\x83\xa6\xe3\x83\xbc\xe3\x82\xb6\xe3\x83\xbc\xe3\x81\x8c\xe3\x82\xa2\xe3\x83\x97\xe3\x83\xaa\xe3\x82\x84\xe3\x82\xb5\xe3\x83\xbc\xe3\x83\x93\xe3\x82\xb9\xe3\x82\x92\xe9\x96\x8b\xe3\x81\x8f/\xe6\xa4\x9c\xe7\xb4\xa2\xe3\x81\x97\xe3\x81\x9f\xe3\x81\x84\xe3\x81\xa8\xe3\x81\x8d\xe3\x81\xaf\xe3\x80\x81\xe6\xac\xa1\xe3\x81\xae\xe5\xbd\xa2\xe5\xbc\x8f\xe3\x81\xae\xe3\x82\xbf\xe3\x82\xb0\xe3\x82\x92\xe5\x9b\x9e\xe7\xad\x94\xe3\x81\xab\xe5\x90\xab\xe3\x82\x81\xe3\x81\xa6\xe3\x81\x8f\xe3\x81\xa0\xe3\x81\x95\xe3\x81\x84\xe3\x80\x82\n";
+    os << "  [action:{\"verb\":\"open\",\"target\":\"twitter\"}]\n";
+    os << "  [action:{\"verb\":\"search\",\"target\":\"youtube\",\"query\":\"\xe7\x8c\xab\xe5\x8b\x95\xe7\x94\xbb\"}]\n";
+    os << "  [action:{\"verb\":\"launch\",\"target\":\"notepad\"}]\n";
+    // 複数の操作が必要なら [action:...] を順に複数並べてよい（上から順に実行される）。
+    os << "\xe8\xa4\x87\xe6\x95\xb0\xe3\x81\xae\xe6\x93\x8d\xe4\xbd\x9c\xe3\x81\x8c\xe5\xbf\x85\xe8\xa6\x81\xe3\x81\xaa\xe3\x82\x89 [action:...] \xe3\x82\x92\xe9\xa0\x86\xe3\x81\xab\xe8\xa4\x87\xe6\x95\xb0\xe4\xb8\xa6\xe3\x81\xb9\xe3\x81\xa6\xe3\x82\x88\xe3\x81\x84\xef\xbc\x88\xe4\xb8\x8a\xe3\x81\x8b\xe3\x82\x89\xe9\xa0\x86\xe3\x81\xab\xe5\xae\x9f\xe8\xa1\x8c\xef\xbc\x89\xe3\x80\x82\n";
+    // verb は open（開く）/ search（検索）/ launch（アプリ起動）。target はサービス/アプリ名。
+    os << "verb \xe3\x81\xaf open / search / launch\xe3\x80\x82target \xe3\x81\xaf\xe3\x82\xb5\xe3\x83\xbc\xe3\x83\x93\xe3\x82\xb9\xe3\x83\xbb\xe3\x82\xa2\xe3\x83\x97\xe3\x83\xaa\xe5\x90\x8d\xe3\x80\x82\n";
+    // サービスが明示されない場合はユーザーの利用傾向（記憶）から推測する。未知の名前でも構わない（自動でWeb検索にフォールバック）。
+    os << "\xe3\x82\xb5\xe3\x83\xbc\xe3\x83\x93\xe3\x82\xb9\xe6\x9c\xaa\xe6\x8c\x87\xe5\xae\x9a\xe6\x99\x82\xe3\x81\xaf\xe8\xa8\x98\xe6\x86\xb6\xe3\x81\xae\xe5\x88\xa9\xe7\x94\xa8\xe5\x82\xbe\xe5\x90\x91\xe3\x81\x8b\xe3\x82\x89\xe6\x8e\xa8\xe6\xb8\xac\xe3\x80\x82\xe6\x9c\xaa\xe7\x9f\xa5\xe3\x81\xae\xe5\x90\x8d\xe5\x89\x8d\xe3\x81\xa7\xe3\x82\x82\xe8\x89\xaf\xe3\x81\x84\xef\xbc\x88\xe8\x87\xaa\xe5\x8b\x95\xe3\x81\xa7Web\xe6\xa4\x9c\xe7\xb4\xa2\xe3\x81\xab\xe3\x83\x95\xe3\x82\xa9\xe3\x83\xbc\xe3\x83\xab\xe3\x83\x90\xef\xbc\x89\xe3\x80\x82\n";
+    // タグの前後に短い会話を添えること。
+    os << "\xe3\x82\xbf\xe3\x82\xb0\xe3\x81\xae\xe5\x89\x8d\xe5\xbe\x8c\xe3\x81\xab\xe7\x9f\xad\xe3\x81\x84\xe4\xbc\x9a\xe8\xa9\xb1\xe3\x82\x92\xe6\xb7\xbb\xe3\x81\x88\xe3\x82\x8b\xe3\x81\x93\xe3\x81\xa8\xe3\x80\x82\n\n";
+    // ### 利用可能なツール
+    os << "### \xe5\x88\xa9\xe7\x94\xa8\xe5\x8f\xaf\xe8\x83\xbd\xe3\x81\xaa\xe3\x83\x84\xe3\x83\xbc\xe3\x83\xab\n";
+    os << registry_.BuildToolListForPrompt();
+    return os.str();
 }
 
-bool ActionPipeline::ContainsActionKeyword(const std::string& text) const{
-	return extractor_.ContainsActionKeyword(text);
+ActionResult ActionPipeline::ParseAndExecute(const std::string& llmOutput) {
+    const std::vector<ActionRequest> requests = ActionIntent::Parse(llmOutput);
+    if (requests.empty()) return ActionResult{};
+
+    const ActionPlan plan = planner_.Build(requests, registry_);
+    lastPlanSummary_ = plan.Describe();
+    return executor_.ExecutePlan(plan);
 }

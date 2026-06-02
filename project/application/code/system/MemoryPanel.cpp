@@ -274,7 +274,8 @@ void MemoryPanel::Draw() {
             }
 
             if (modelLoadRequested_ && !localLLM_->IsProcessing()) {
-                localLLM_->LoadModel(localModelPath_);
+                // 文脈長は 8192。RAG(検索結果)＋ペルソナ＋記憶＋各種プロンプトで 4096 では溢れるため。
+                localLLM_->LoadModel(localModelPath_, 99, 8192);
                 modelLoadRequested_ = false;
             }
         } else {

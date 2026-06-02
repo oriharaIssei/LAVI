@@ -62,6 +62,7 @@ AppConfigData LoadAppConfig() {
         std::string(AppConfigData::DefaultLLMSystemPrompt()));
     cfg.visionPrompt = *gv->AddValue<std::string>(kScene, kGroup, "Vision_Prompt",
         std::string(AppConfigData::DefaultVisionPrompt()));
+    cfg.minimizeToTrayOnClose = *gv->AddValue<bool>(kScene, kGroup, "MinimizeToTrayOnClose", true);
     return cfg;
 }
 
@@ -70,5 +71,6 @@ void SaveAppConfig(const AppConfigData& config) {
     gv->SetValue(kScene, kGroup, "ApiKey", config.apiKey);
     gv->SetValue(kScene, kGroup, "LLM_SystemPrompt", config.llmSystemPrompt);
     gv->SetValue(kScene, kGroup, "Vision_Prompt", config.visionPrompt);
+    gv->SetValue(kScene, kGroup, "MinimizeToTrayOnClose", config.minimizeToTrayOnClose);
     gv->SaveFile(kScene, kGroup);
 }

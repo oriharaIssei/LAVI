@@ -109,7 +109,7 @@ project "LAVI"
     libdirs { "application/externals/opencv/lib" }
     links(table.join(
         { "OriGine", "whisper", "llama", "ggml", "ggml-base", "ggml-cpu", "ggml-cuda", "cudart_static", "cublas", "cublasLt", "cuda",
-          "libcurl", "xaudio2", "onnxruntime", "sqlite3" },
+          "libcurl", "xaudio2", "onnxruntime", "sqlite3", "RuntimeObject" }, -- RuntimeObject: C++/WinRT 位置情報用
         getEngineLinks()
     ))
 

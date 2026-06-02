@@ -15,6 +15,8 @@
 struct SharedMediaContext;
 class LongTermMemory;
 class SentenceEmbedding;
+class KnowledgeBase;
+class WebSearchClient;
 class ActionPipeline;
 class LocalLLM;
 
@@ -64,6 +66,7 @@ public:
         float escalateCooldown = 8.0f; // 自動送出の最小間隔 (秒)
         bool autoSpeak = true;         // 応答を VoiceVox で発話するか
         bool useLocalLLM = true;       // 応答生成にローカル LLM を使う（未ロード時はクラウドへフォールバック）
+        bool useWebContext = true;     // 時事クエリ検出時に Web 検索結果を文脈注入する（時事対策）
     };
 
     GatekeeperManager();
@@ -75,6 +78,8 @@ public:
     void Initialize(SharedMediaContext* ctx);
     void SetLongTermMemory(LongTermMemory* mem) { longTermMemory_ = mem; }
     void SetSentenceEmbedding(SentenceEmbedding* emb) { embedding_ = emb; }
+    void SetKnowledgeBase(KnowledgeBase* kb) { knowledgeBase_ = kb; }
+    void SetWebSearch(WebSearchClient* ws) { webSearch_ = ws; }
     void SetActionPipeline(ActionPipeline* pipeline) { actionPipeline_ = pipeline; }
     void SetLocalLLM(LocalLLM* llm) { localLLM_ = llm; }
     void Update();  // MediaCaptureDemoSystem::Update から毎フレーム呼ぶ
@@ -151,5 +156,7 @@ private:
     double lastEscalate_ = -1.0e9;
     LongTermMemory* longTermMemory_ = nullptr;
     SentenceEmbedding* embedding_ = nullptr;
+    KnowledgeBase* knowledgeBase_ = nullptr;  // 知識ベース RAG（共有インスタンス。所有しない）
+    WebSearchClient* webSearch_ = nullptr;    // Web 検索（時事対策。共有インスタンス。所有しない）
     ActionPipeline* actionPipeline_ = nullptr;
 };

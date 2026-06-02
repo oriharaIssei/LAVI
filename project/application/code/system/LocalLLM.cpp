@@ -1,9 +1,60 @@
 #include "LocalLLM.h"
 
 #include <llama.h>
+#include <ggml-backend.h>
 
+#include <algorithm>
+#include <chrono>
 #include <cstring>
+#include <ctime>
+#include <fstream>
 #include <vector>
+
+namespace {
+// 一時診断: ロード時に登録済み ggml バックエンド（CPU/CUDA 等）を lavi_trace.log へ記録する。
+// GPU オフロードが効いているか（速度問題の切り分け）を確認したら除去する。
+void TraceBackends(int nGpuLayers) {
+    std::ofstream f("lavi_trace.log", std::ios::app);
+    if (!f) return;
+    std::time_t t = std::time(nullptr);
+    std::tm tm{};
+    localtime_s(&tm, &t);
+    char ts[32];
+    std::strftime(ts, sizeof(ts), "%H:%M:%S", &tm);
+    f << ts << " LoadModel: nGpuLayers=" << nGpuLayers
+      << " devices=" << ggml_backend_dev_count() << "\n";
+    bool hasGpu = false;
+    for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
+        ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+       enum ggml_backend_dev_type ty = ggml_backend_dev_type(dev);
+        const char* tyName = ty == GGML_BACKEND_DEVICE_TYPE_GPU ? "GPU"
+                           : ty == GGML_BACKEND_DEVICE_TYPE_IGPU ? "IGPU"
+                           : ty == GGML_BACKEND_DEVICE_TYPE_ACCEL ? "ACCEL" : "CPU";
+        if (ty == GGML_BACKEND_DEVICE_TYPE_GPU || ty == GGML_BACKEND_DEVICE_TYPE_IGPU) hasGpu = true;
+        f << ts << "   dev[" << i << "]=" << ggml_backend_dev_name(dev) << " type=" << tyName << "\n";
+    }
+    f << ts << "   => " << (hasGpu ? "GPU backend present (offload OK)"
+                                   : "NO GPU backend -> running on CPU (slow!)") << "\n";
+}
+
+// 一時診断: 実効生成性能（プレフィル/生成の tok/s）を lavi_trace.log へ記録する。
+// GPU 上で 4B-Q4 なら生成は数十 tok/s が期待値。1 桁なら部分オフロード/CPU を疑う。
+void TraceGen(int promptTokens, int nKeep, double prefillMs, int genTokens, double genMs) {
+    std::ofstream f("lavi_trace.log", std::ios::app);
+    if (!f) return;
+    std::time_t t = std::time(nullptr);
+    std::tm tm{};
+    localtime_s(&tm, &t);
+    char ts[32];
+    std::strftime(ts, sizeof(ts), "%H:%M:%S", &tm);
+    const int prefillN = promptTokens - nKeep;
+    const double prefillTps = prefillMs > 0 ? prefillN * 1000.0 / prefillMs : 0.0;
+    const double genTps = genMs > 0 ? genTokens * 1000.0 / genMs : 0.0;
+    f << ts << " Gen: prompt=" << promptTokens << " cached=" << nKeep
+      << " prefill=" << prefillN << "tok/" << static_cast<int>(prefillMs) << "ms(" << static_cast<int>(prefillTps) << "tps)"
+      << " gen=" << genTokens << "tok/" << static_cast<int>(genMs) << "ms(" << static_cast<int>(genTps) << "tps)\n";
+}
+} // namespace
 
 namespace {
 
@@ -30,6 +81,8 @@ bool LocalLLM::LoadModel(const std::string& modelPath, int nGpuLayers, int conte
     UnloadModel();
 
     contextSize_ = contextSize;
+
+    TraceBackends(nGpuLayers);
 
     llama_model_params modelParams = llama_model_default_params();
     modelParams.n_gpu_layers = nGpuLayers;
@@ -288,15 +341,33 @@ std::future<std::string> LocalLLM::GenerateAsync(const std::string& prompt, Loca
 
         const llama_vocab* vocab = llama_model_get_vocab(model_);
 
-        std::vector<llama_token> tokens(contextSize_);
+        // 出力余地（maxTokens_）を確保した入力予算。これを超える分は文脈溢れ。
+        const int inputBudget = (std::max)(256, contextSize_ - maxTokens_);
+
+        std::vector<llama_token> tokens(static_cast<size_t>(contextSize_) + 64);
         int nTokens = llama_tokenize(vocab, prompt.c_str(), static_cast<int32_t>(prompt.size()),
                                       tokens.data(), static_cast<int32_t>(tokens.size()), true, true);
+        if (nTokens < 0) {
+            // バッファ不足: 必要数を確保して再トークナイズ（負値は -必要トークン数）。
+            tokens.resize(static_cast<size_t>(-nTokens));
+            nTokens = llama_tokenize(vocab, prompt.c_str(), static_cast<int32_t>(prompt.size()),
+                                      tokens.data(), static_cast<int32_t>(tokens.size()), true, true);
+        }
         if (nTokens < 0) {
             cachedTokens_.clear();
             isProcessing_.store(false);
             return std::string();
         }
         tokens.resize(nTokens);
+
+        // 文脈溢れ: 直近トークンのみ残して出力余地を確保する。
+        // （これをしないと巨大プロンプトで黙って空応答＝「返事が返ってこない」になる）
+        if (nTokens > inputBudget) {
+            const int drop = nTokens - inputBudget;
+            tokens.erase(tokens.begin(), tokens.begin() + drop);
+            nTokens = static_cast<int>(tokens.size());
+            cachedTokens_.clear(); // 先頭を削ったのでプレフィックスキャッシュは無効化
+        }
 
         // 前回トークン列との共通プレフィックスを KV に残し、新規部分のみ再デコードする。
         // ペルソナ等の先頭固定部分は再処理されない（プロンプトキャッシュ）。
@@ -313,6 +384,8 @@ std::future<std::string> LocalLLM::GenerateAsync(const std::string& prompt, Loca
             llama_memory_clear(mem, true);
         }
 
+        const auto tStart = std::chrono::steady_clock::now();
+
         const int nBatch = 512;
         bool decodeFailed = false;
         for (int start = nKeep; start < nTokens; start += nBatch) {
@@ -326,6 +399,7 @@ std::future<std::string> LocalLLM::GenerateAsync(const std::string& prompt, Loca
             llama_batch_free(batch);
             if (ret != 0) { decodeFailed = true; break; }
         }
+        const auto tPrefill = std::chrono::steady_clock::now();
         if (decodeFailed) {
             cachedTokens_.clear();
             isProcessing_.store(false);
@@ -379,6 +453,7 @@ std::future<std::string> LocalLLM::GenerateAsync(const std::string& prompt, Loca
         cachedTokens_.assign(tokens.begin(), tokens.end());
 
         int curPos = nTokens;
+        int genCount = 0;
         for (int i = 0; i < maxTokens_; ++i) {
             if (cancelRequested_.load()) break;
 
@@ -401,11 +476,17 @@ std::future<std::string> LocalLLM::GenerateAsync(const std::string& prompt, Loca
             }
             llama_batch_free(single);
             ++curPos;
+            ++genCount;
             cachedTokens_.push_back(newToken); // KV に入った生成トークンを追記
         }
 
         // think 外で保留している残りを出し切る
         if (stripThink_ && !inThink && !hold.empty() && cb) cb(hold);
+
+        const auto tEnd = std::chrono::steady_clock::now();
+        using ms = std::chrono::duration<double, std::milli>;
+        TraceGen(nTokens, nKeep,
+                 ms(tPrefill - tStart).count(), genCount, ms(tEnd - tPrefill).count());
 
         llama_sampler_free(sampler);
         isProcessing_.store(false);

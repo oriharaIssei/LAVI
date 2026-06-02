@@ -11,6 +11,9 @@
 #include "GatekeeperPanel.h"
 #include "MemoryPanel.h"
 #include "SentenceEmbedding.h"
+#include "KnowledgeBase.h"
+#include "WebSearchClient.h"
+#include "LocationProvider.h"
 #include "WebAction.h"
 #include "system/action/ActionPipeline.h"
 #include "winApp/WinApp.h"
@@ -77,9 +80,20 @@ void MediaCaptureDemoSystem::Initialize(){
 	LoadTagAxes("application/resource/memory/tag_axes.json");
 
 	actionPipeline_ = std::make_unique<ActionPipeline>();
-	actionPipeline_->LoadConfig("application/resource/memory/tag_axes.json");
+	actionPipeline_->LoadConfig("application/resource/action/tools.json");
 	llmPanel_->SetActionPipeline(actionPipeline_.get());
 	gkManager_->SetActionPipeline(actionPipeline_.get());
+
+	// Web 検索（時事対策）。時事キーワードは JSON から読み込む（無ければ既定値）。
+	webSearch_ = std::make_unique<WebSearchClient>();
+	webSearch_->LoadKeywords("application/resource/web/current_events.json");
+	gkManager_->SetWebSearch(webSearch_.get());
+	llmPanel_->SetWebSearch(webSearch_.get());
+
+	// 現在地（Windows 位置情報→逆ジオコーディング）をバックグラウンドで取得開始。
+	location_ = std::make_unique<LocationProvider>();
+	location_->Start();
+	llmPanel_->SetLocation(location_.get());
 
 	// ホットキー登録 (Engine API)
 	auto* winApp = OriGine::Engine::GetInstance()->GetWinApp();
@@ -89,7 +103,7 @@ void MediaCaptureDemoSystem::Initialize(){
 
 	// システムトレイ
 	winApp->EnableSystemTray(L"LAVI");
-	winApp->SetMinimizeToTrayOnClose(true);
+	winApp->SetMinimizeToTrayOnClose(ctx_->config.minimizeToTrayOnClose);
 
 	// Sentence Embedding (存在すれば読み込み)
 	const std::filesystem::path embDir = "application/resource/embedding";
@@ -100,6 +114,15 @@ void MediaCaptureDemoSystem::Initialize(){
 		if(embedding_->LoadModel(modelPath.wstring(),vocabPath.string())){
 			gkManager_->SetSentenceEmbedding(embedding_.get());
 			llmPanel_->SetSentenceEmbedding(embedding_.get());
+
+			// 知識ベース RAG: 埋め込み共有 + SQLite。起動時に knowledge/ フォルダを取り込む。
+			knowledgeBase_ = std::make_unique<KnowledgeBase>();
+			if(knowledgeBase_->Initialize("application/resource/knowledge/knowledge.db", embedding_.get())){
+				knowledgeBase_->ImportFolder("application/resource/knowledge");
+				gkManager_->SetKnowledgeBase(knowledgeBase_.get());
+			} else{
+				knowledgeBase_.reset();
+			}
 		} else{
 			embedding_.reset();
 		}
@@ -126,6 +149,9 @@ void MediaCaptureDemoSystem::Finalize(){
 	memoryPanel_.reset();
 	gkPanel_.reset();
 	gkManager_.reset();
+	if(knowledgeBase_){ knowledgeBase_->Finalize(); knowledgeBase_.reset(); }
+	webSearch_.reset();
+	location_.reset();
 	llmPanel_.reset();
 	visionPanel_.reset();
 	voiceVoxPanel_.reset();
@@ -165,6 +191,21 @@ void MediaCaptureDemoSystem::DrawTurnControlUI(){
 			? "(未ロード時はクラウドへフォールバック)"
 			: "(クラウド Claude を使用)");
 
+		// 時事対策: 鮮度クエリ検出時に Web 検索結果を文脈注入（ローカルは自前fetch / クラウドはweb_search）
+		ImGui::Checkbox("Web Context (時事対策)##turn", &gkManager_->config().useWebContext);
+		ImGui::SameLine();
+		ImGui::TextDisabled("「最新/今日/ニュース」等で自動的に Web 検索を文脈注入");
+
+		// 閉じるボタンの挙動: ON=トレイに常駐 / OFF=×で通常終了。即時反映＋保存。
+		if(ImGui::Checkbox("閉じるボタンでトレイに最小化##tray", &ctx_->config.minimizeToTrayOnClose)){
+			if(auto* wa = OriGine::Engine::GetInstance()->GetWinApp()){
+				wa->SetMinimizeToTrayOnClose(ctx_->config.minimizeToTrayOnClose);
+			}
+			SaveAppConfig(ctx_->config);
+		}
+		ImGui::SameLine();
+		ImGui::TextDisabled("OFFにすると×ボタンで通常終了");
+
 		ImGui::SliderFloat("Start Thld##turn", &cfg.startThreshold, 0.001f, 0.2f, "%.4f");
 		ImGui::SliderFloat("End Thld##turn", &cfg.endThreshold, 0.001f, 0.2f, "%.4f");
 		ImGui::SliderFloat("Min Speech (ms)##turn", &cfg.minSpeechMs, 0.0f, 1000.0f, "%.0f");
@@ -186,6 +227,68 @@ void MediaCaptureDemoSystem::DrawTurnControlUI(){
 		}
 		ImGui::TextDisabled("発話を検知すると自動で転写します。マイクのキャプチャを開始してください。");
 	}
+}
+
+void MediaCaptureDemoSystem::DrawKnowledgeBaseUI(){
+	if(!ImGui::CollapsingHeader("Knowledge Base (知識ベース RAG)")) return;
+
+	if(!knowledgeBase_ || !knowledgeBase_->IsReady()){
+		ImGui::TextDisabled("埋め込みモデル未ロードのため無効です（application/resource/embedding）。");
+		return;
+	}
+
+	// std::string を ImGui に渡すためのリサイズコールバック（このプロジェクトの既存パターン）
+	auto resizeCb = [](ImGuiInputTextCallbackData* data) -> int {
+		if(data->EventFlag == ImGuiInputTextFlags_CallbackResize){
+			auto* str = static_cast<std::string*>(data->UserData);
+			str->resize(data->BufTextLen);
+			data->Buf = str->data();
+		}
+		return 0;
+	};
+	if(kbSourceBuf_.capacity() < 128) kbSourceBuf_.reserve(128);
+	if(kbTextBuf_.capacity() < 1024) kbTextBuf_.reserve(1024);
+
+	ImGui::Text("登録チャンク数: %d", knowledgeBase_->ChunkCount());
+
+	std::vector<std::string> sources = knowledgeBase_->ListSources();
+	if(!sources.empty() && ImGui::TreeNode("出典一覧##kb")){
+		for(const auto& s : sources){
+			ImGui::BulletText("%s", s.c_str());
+			ImGui::SameLine();
+			if(ImGui::SmallButton((std::string("削除##kb_") + s).c_str())){
+				knowledgeBase_->RemoveSource(s);
+				kbStatus_ = "削除: " + s;
+			}
+		}
+		ImGui::TreePop();
+	}
+
+	ImGui::Separator();
+	ImGui::InputText("出典名##kb", kbSourceBuf_.data(), kbSourceBuf_.capacity() + 1,
+		ImGuiInputTextFlags_CallbackResize, resizeCb, &kbSourceBuf_);
+	ImGui::InputTextMultiline("本文##kb", kbTextBuf_.data(), kbTextBuf_.capacity() + 1,
+		ImVec2(-1, 100), ImGuiInputTextFlags_CallbackResize, resizeCb, &kbTextBuf_);
+
+	if(ImGui::Button("追加 / 更新##kb")){
+		std::string src = kbSourceBuf_.empty() ? std::string("manual") : kbSourceBuf_;
+		int added = knowledgeBase_->AddDocument(src, kbTextBuf_);
+		kbStatus_ = "追加 " + std::to_string(added) + " チャンク (" + src + ")";
+		kbTextBuf_.clear();
+	}
+	ImGui::SameLine();
+	if(ImGui::Button("フォルダ再取込##kb")){
+		int files = knowledgeBase_->ImportFolder("application/resource/knowledge");
+		kbStatus_ = "取込ファイル数: " + std::to_string(files);
+	}
+	ImGui::SameLine();
+	if(ImGui::Button("全削除##kb")){
+		knowledgeBase_->Clear();
+		kbStatus_ = "全削除しました";
+	}
+
+	if(!kbStatus_.empty()) ImGui::TextDisabled("%s", kbStatus_.c_str());
+	ImGui::TextDisabled("knowledge/ に .txt/.md を置くと起動時に取り込みます。質問に関連するチャンクを自動で文脈注入します。");
 }
 
 void MediaCaptureDemoSystem::Update(){
@@ -265,6 +368,7 @@ void MediaCaptureDemoSystem::Update(){
 	ImGui::Begin("Media Capture Demo");
 
 	DrawTurnControlUI();
+	DrawKnowledgeBaseUI();
 
 	if(ImGui::BeginTabBar("MediaTabs")){
 		if(ImGui::BeginTabItem("Microphone")){

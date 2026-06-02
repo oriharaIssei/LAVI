@@ -1,0 +1,24 @@
+14:18:57 forced-search: enter, query=神奈川県横浜市港南区 今日の天気
+14:18:57 forced-search: before BuildContext
+14:18:59 forced-search: after BuildContext, len=1878
+14:18:59 forced-search: before generate
+14:18:59 forced-search: after generate, len=0
+14:20:22 forced-search: enter, query=神奈川県横浜市港南区 今日の天気を教えて
+14:20:22 forced-search: before BuildContext
+14:20:23 forced-search: after BuildContext, len=3146
+14:20:23 forced-search: before generate
+14:20:23 forced-search: after generate, len=0
+14:35:44 forced-search: enter, query=神奈川県横浜市港南区 今日の天気を教えて
+14:35:44 forced-search: before BuildContext
+14:35:45 forced-search: after BuildContext, len=3090
+14:35:45 forced-search: before generate
+14:35:45 forced-search: after generate, len=0
+15:37:14 forced-search: enter, query=神奈川県横浜市港南区 今日の天気
+15:37:14 forced-search: before BuildContext
+15:37:15 forced-search: after BuildContext, len=1441
+15:37:15 forced-search: before generate
+15:39:23 forced-search: after generate, len=847
+21:01:52 LoadModel: nGpuLayers=99 devices=2
+21:01:52   dev[0]=CUDA0 type=GPU
+21:01:52   dev[1]=CPU type=CPU
+21:01:52   => GPU backend present (offload OK)

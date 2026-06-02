@@ -1,0 +1,103 @@
+{
+  "tools": [
+    {
+      "name": "google",
+      "type": "web",
+      "openUrl": "https://www.google.com",
+      "searchUrlTemplate": "https://www.google.com/search?q={query}",
+      "aliases": ["ぐーぐる", "グーグル", "検索"]
+    },
+    {
+      "name": "youtube",
+      "type": "web",
+      "openUrl": "https://www.youtube.com",
+      "searchUrlTemplate": "https://www.youtube.com/results?search_query={query}",
+      "aliases": ["ゆーちゅーぶ", "ユーチューブ", "yt", "動画"]
+    },
+    {
+      "name": "twitter",
+      "type": "web",
+      "openUrl": "https://x.com",
+      "searchUrlTemplate": "https://x.com/search?q={query}",
+      "aliases": ["x", "ツイッター", "つぶやき", "tweet"]
+    },
+    {
+      "name": "spotify",
+      "type": "web",
+      "openUrl": "https://open.spotify.com",
+      "searchUrlTemplate": "https://open.spotify.com/search/{query}",
+      "aliases": ["スポティファイ", "音楽", "music"]
+    },
+    {
+      "name": "niconico",
+      "type": "web",
+      "openUrl": "https://www.nicovideo.jp",
+      "searchUrlTemplate": "https://www.nicovideo.jp/search/{query}",
+      "aliases": ["ニコニコ", "ニコ動", "nico"]
+    },
+    {
+      "name": "github",
+      "type": "web",
+      "openUrl": "https://github.com",
+      "searchUrlTemplate": "https://github.com/search?q={query}",
+      "aliases": ["ギットハブ", "ぎっとはぶ"]
+    },
+    {
+      "name": "amazon",
+      "type": "web",
+      "openUrl": "https://www.amazon.co.jp",
+      "searchUrlTemplate": "https://www.amazon.co.jp/s?k={query}",
+      "aliases": ["アマゾン", "あまぞん"]
+    },
+    {
+      "name": "wikipedia",
+      "type": "web",
+      "openUrl": "https://ja.wikipedia.org",
+      "searchUrlTemplate": "https://ja.wikipedia.org/w/index.php?search={query}",
+      "aliases": ["ウィキペディア", "ウィキ", "wiki"]
+    },
+    {
+      "name": "google_maps",
+      "type": "web",
+      "openUrl": "https://www.google.com/maps",
+      "searchUrlTemplate": "https://www.google.com/maps/search/{query}",
+      "aliases": ["マップ", "地図", "maps", "map"]
+    },
+    {
+      "name": "notepad",
+      "type": "app",
+      "exe": "notepad.exe",
+      "aliases": ["メモ帳", "めもちょう", "notepad.exe"]
+    },
+    {
+      "name": "calc",
+      "type": "app",
+      "exe": "calc.exe",
+      "aliases": ["電卓", "でんたく", "calculator", "calc.exe"]
+    },
+    {
+      "name": "explorer",
+      "type": "app",
+      "exe": "explorer.exe",
+      "aliases": ["エクスプローラー", "ファイル", "explorer.exe"]
+    },
+    {
+      "name": "paint",
+      "type": "app",
+      "exe": "mspaint.exe",
+      "aliases": ["ペイント", "mspaint.exe"]
+    },
+    {
+      "name": "terminal",
+      "type": "app",
+      "exe": "wt.exe",
+      "aliases": ["ターミナル", "wt.exe"]
+    },
+    {
+      "name": "vscode",
+      "type": "app",
+      "exe": "code.exe",
+      "aliases": ["VS Code", "vs code", "code.exe", "コード"]
+    }
+  ]
+}
