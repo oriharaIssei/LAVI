@@ -22,3 +22,12 @@
 21:01:52   dev[0]=CUDA0 type=GPU
 21:01:52   dev[1]=CPU type=CPU
 21:01:52   => GPU backend present (offload OK)
+00:58:08 LoadModel: nGpuLayers=99 devices=2
+00:58:08   dev[0]=CUDA0 type=GPU
+00:58:08   dev[1]=CPU type=CPU
+00:58:08   => GPU backend present (offload OK)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+01:13:06 LoadModel: nGpuLayers=99 devices=2
+01:13:06   dev[0]=CUDA0 type=GPU
+01:13:06   dev[1]=CPU type=CPU
+01:13:06   => GPU backend present (offload OK)

@@ -6,6 +6,7 @@
 #include "AppConfig.h"
 #include "EmotionTag.h"
 #include "MemoryPanel.h"
+#include "KnowledgeBase.h"
 #include "LocalLLM.h"
 #include "ConversationMemory.h"
 #include "WebAction.h"
@@ -81,6 +82,7 @@ void LLMChatPanel::SavePanelState() {
     gv->SetValue(sc, gr, "AttachAppInfo", llmAttachAppInfo_);
     gv->SetValue(sc, gr, "EnableWebSearch", llmEnableWebSearch_);
     gv->SetValue(sc, gr, "UseMemoryContext", useMemoryContext_);
+    gv->SetValue(sc, gr, "UseKnowledgeBase", useKnowledgeBase_);
     gv->SetValue(sc, gr, "AutoObserve", llmAutoObserve_);
     gv->SetValue(sc, gr, "AutoObserveWebCam", llmAutoObserveWebCam_);
     gv->SetValue(sc, gr, "AutoObserveScreen", llmAutoObserveScreen_);
@@ -101,6 +103,7 @@ void LLMChatPanel::LoadPanelState() {
     llmAttachAppInfo_ = *gv->AddValue<bool>(sc, gr, "AttachAppInfo", llmAttachAppInfo_);
     llmEnableWebSearch_ = *gv->AddValue<bool>(sc, gr, "EnableWebSearch", llmEnableWebSearch_);
     useMemoryContext_ = *gv->AddValue<bool>(sc, gr, "UseMemoryContext", useMemoryContext_);
+    useKnowledgeBase_ = *gv->AddValue<bool>(sc, gr, "UseKnowledgeBase", useKnowledgeBase_);
     llmAutoObserve_ = *gv->AddValue<bool>(sc, gr, "AutoObserve", llmAutoObserve_);
     llmAutoObserveWebCam_ = *gv->AddValue<bool>(sc, gr, "AutoObserveWebCam", llmAutoObserveWebCam_);
     llmAutoObserveScreen_ = *gv->AddValue<bool>(sc, gr, "AutoObserveScreen", llmAutoObserveScreen_);
@@ -128,7 +131,30 @@ LLMStreamCallback LLMChatPanel::MakeStreamCallback() {
             }
 
             speechTagBuf_ += delta;
-            static const std::string kTag = "[browser:";
+            // 読み上げから除外する制御タグの先頭（[browser:URL] 等のアクション、[learn:...] の知識記録）。
+            static const std::string kTags[] = { "[browser:", "[learn:" };
+            // バッファ内で最も早く現れるタグ開始位置を返す（無ければ npos）。
+            auto findTagStart = [](const std::string& s) -> size_t {
+                size_t pos = std::string::npos;
+                for (const std::string& t : kTags) {
+                    size_t p = s.find(t);
+                    if (p != std::string::npos && (pos == std::string::npos || p < pos)) pos = p;
+                }
+                return pos;
+            };
+            // 末尾がいずれかのタグ先頭の途中（部分一致）なら、その手前までを読み上げ可能長とする。
+            auto safeFeedLen = [](const std::string& s) -> size_t {
+                size_t safe = s.size();
+                for (const std::string& t : kTags) {
+                    for (size_t n = 1; n < t.size() && n <= s.size(); ++n) {
+                        if (s.compare(s.size() - n, n, t, 0, n) == 0) {
+                            if (s.size() - n < safe) safe = s.size() - n;
+                            break;
+                        }
+                    }
+                }
+                return safe;
+            };
             while (!speechTagBuf_.empty()) {
                 if (inActionTag_) {
                     auto end = speechTagBuf_.find(']');
@@ -136,15 +162,9 @@ LLMStreamCallback LLMChatPanel::MakeStreamCallback() {
                     speechTagBuf_ = speechTagBuf_.substr(end + 1);
                     inActionTag_ = false;
                 } else {
-                    auto tagPos = speechTagBuf_.find(kTag);
+                    auto tagPos = findTagStart(speechTagBuf_);
                     if (tagPos == std::string::npos) {
-                        size_t safe = speechTagBuf_.size();
-                        for (size_t n = 1; n < kTag.size() && n <= speechTagBuf_.size(); ++n) {
-                            if (speechTagBuf_.compare(speechTagBuf_.size() - n, n, kTag, 0, n) == 0) {
-                                safe = speechTagBuf_.size() - n;
-                                break;
-                            }
-                        }
+                        size_t safe = safeFeedLen(speechTagBuf_);
                         if (safe > 0) {
                             synthPipeline_.FeedDelta(speechTagBuf_.substr(0, safe));
                         }
@@ -283,6 +303,15 @@ void LLMChatPanel::SendLLMRequest(const std::string& text, const std::vector<LLM
         }
     }
 
+    // 知識ベース RAG: ユーザー発話に関連する知識チャンクを埋め込み類似で取り出し注入する
+    // （個人の事実=記憶 と併用。情報系なので forced-search でも有効）。GatekeeperManager と同じ方式。
+    if (useKnowledgeBase_ && knowledgeBase_ && knowledgeBase_->IsReady() && !text.empty()) {
+        std::string kbCtx = knowledgeBase_->BuildContext(text);
+        if (!kbCtx.empty()) {
+            infoContext += "\n\n" + kbCtx;
+        }
+    }
+
     if (llmAttachAppInfo_) {
         auto apps = OriGine::ProcessManager::EnumerateWindows();
         std::string appText = OriGine::ProcessManager::FormatAsText(apps);
@@ -300,6 +329,12 @@ void LLMChatPanel::SendLLMRequest(const std::string& text, const std::vector<LLM
     if (actionPipeline_ && !actionPipeline_->Registry().Empty()) {
         actionContext += "\n\n";
         actionContext += actionPipeline_->BuildToolPrompt();
+    }
+    // 知識の自動収集: LLM が [learn:...] で恒久的な一般知識を KB に記録できる（LLM主導）。
+    // 時事回答（forced-search）では actionContext を載せないので、時間で変わる情報は記録されない。
+    if (useKnowledgeBase_ && knowledgeBase_ && knowledgeBase_->IsReady()) {
+        actionContext += "\n\n";
+        actionContext += KnowledgeBase::LearnToolPrompt();
     }
 
     const std::string volatileContext = infoContext + actionContext; // クラウド/通常ローカル用
@@ -565,6 +600,8 @@ void LLMChatPanel::Draw() {
 
     ImGui::Checkbox("Memory##llm", &useMemoryContext_);
     ImGui::SameLine();
+    ImGui::Checkbox("Knowledge##llm", &useKnowledgeBase_);
+    ImGui::SameLine();
     ImGui::Checkbox("Web##llm", &llmEnableWebSearch_);
     ImGui::SameLine();
     ImGui::Checkbox("VoiceVox Output##llm", &llmSpeakResponse_);
@@ -625,7 +662,7 @@ void LLMChatPanel::Draw() {
                 ImGui::SameLine();
             }
             std::string display = (msg.role == "assistant")
-                ? ActionPipeline::StripActionTags(StripWebActions(StripEmotionTag(msg.content)))
+                ? KnowledgeBase::StripLearnNotes(ActionPipeline::StripActionTags(StripWebActions(StripEmotionTag(msg.content))))
                 : msg.content;
             ImGui::TextWrapped("%s", display.c_str());
             ImGui::Spacing();
@@ -637,7 +674,7 @@ void LLMChatPanel::Draw() {
             std::string streamDisplay;
             {
                 std::lock_guard<std::mutex> lock(llmStreamMutex_);
-                streamDisplay = ActionPipeline::StripActionTags(StripWebActions(StripEmotionTag(llmStreamingText_)));
+                streamDisplay = KnowledgeBase::StripLearnNotes(ActionPipeline::StripActionTags(StripWebActions(StripEmotionTag(llmStreamingText_))));
             }
             ImGui::TextWrapped("%s", streamDisplay.empty() ? "..." : streamDisplay.c_str());
         }
@@ -657,6 +694,12 @@ void LLMChatPanel::Draw() {
         if (!lastLLMResponse_.success && !lastLLMResponse_.error.empty()) {
             llmClient_->AddMessage("assistant", "[Error] " + lastLLMResponse_.error);
         } else if (lastLLMResponse_.success) {
+            // 知識の自動収集: 応答内の [learn:...] を KB に保存する（LLM主導）。
+            if (knowledgeBase_) {
+                for (const auto& note : KnowledgeBase::ParseLearnNotes(lastLLMResponse_.content)) {
+                    knowledgeBase_->AddLearnedNote(note);
+                }
+            }
             auto actions = ParseWebActions(lastLLMResponse_.content);
             if (!actions.empty()) {
                 LongTermMemory* ltm = memoryPanel_ ? memoryPanel_->GetLongTermMemory() : nullptr;
@@ -664,7 +707,9 @@ void LLMChatPanel::Draw() {
             }
             if (actionPipeline_) actionPipeline_->ParseAndExecute(lastLLMResponse_.content);
             if (memoryPanel_) {
-                memoryPanel_->GetConversationMemory()->PushMessage("assistant", lastLLMResponse_.content);
+                // 記憶には [learn:...] タグを除いた本文を残す。
+                memoryPanel_->GetConversationMemory()->PushMessage(
+                    "assistant", KnowledgeBase::StripLearnNotes(lastLLMResponse_.content));
             }
         }
         isLLMProcessing_ = false;
@@ -682,6 +727,15 @@ void LLMChatPanel::Draw() {
         lastLLMResponse_.success = !out.empty();
 
         if (!out.empty()) {
+            // 知識の自動収集: [learn:...] を KB に保存してから本文から除去する（LLM主導）。
+            if (knowledgeBase_) {
+                for (const auto& note : KnowledgeBase::ParseLearnNotes(out)) {
+                    knowledgeBase_->AddLearnedNote(note);
+                }
+            }
+            out = KnowledgeBase::StripLearnNotes(out);
+            lastLLMResponse_.content = out;
+
             if (suppressActionsForResponse_.load()) {
                 // 検索して答えるモード: 動画再生などの暴発を防ぐため [browser:]/[action:] は実行せず除去。
                 out = ActionPipeline::StripActionTags(StripWebActions(out));

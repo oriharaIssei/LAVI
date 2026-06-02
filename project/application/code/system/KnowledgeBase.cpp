@@ -301,3 +301,114 @@ std::vector<std::string> KnowledgeBase::ListSources() const {
     }
     return sources;
 }
+
+// ===== 会話中の自動収集（LLM主導 [learn:...] タグ）=====
+
+int KnowledgeBase::AddLearnedNote(const std::string& note) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!db_ || !emb_ || !emb_->IsReady()) return 0;
+
+    const std::string n = Trim(note);
+    if (n.empty()) return 0;
+
+    // 完全一致の重複はスキップ（同じ知識を何度も増やさない）。
+    {
+        sqlite3_stmt* q = nullptr;
+        if (sqlite3_prepare_v2(db_, "SELECT 1 FROM knowledge_chunks WHERE text = ?1 LIMIT 1", -1, &q, nullptr) == SQLITE_OK) {
+            sqlite3_bind_text(q, 1, n.c_str(), -1, SQLITE_TRANSIENT);
+            const bool exists = (sqlite3_step(q) == SQLITE_ROW);
+            sqlite3_finalize(q);
+            if (exists) return 0;
+        }
+    }
+
+    // source="learned" 固定（更新置換はせず追記。剪定は件数上限で行う）。
+    const std::vector<std::string> chunks = ChunkText(n);
+    int added = 0;
+    sqlite3_exec(db_, "BEGIN", nullptr, nullptr, nullptr);
+    for (const auto& chunk : chunks) {
+        std::vector<float> v = emb_->Encode(chunk);
+        if (v.empty()) continue;
+        if (InsertChunk("learned", chunk, v)) ++added;
+    }
+    sqlite3_exec(db_, "COMMIT", nullptr, nullptr, nullptr);
+
+    if (added > 0) PruneLearnedToLimit();
+    return added;
+}
+
+void KnowledgeBase::PruneLearnedToLimit() {
+    // 呼び出し元が mutex_ を保持している前提（再ロックしない）。
+    if (!db_ || learnedChunkLimit_ <= 0) return;
+
+    int n = 0;
+    {
+        sqlite3_stmt* c = nullptr;
+        if (sqlite3_prepare_v2(db_, "SELECT COUNT(*) FROM knowledge_chunks WHERE source = 'learned'", -1, &c, nullptr) == SQLITE_OK) {
+            if (sqlite3_step(c) == SQLITE_ROW) n = sqlite3_column_int(c, 0);
+            sqlite3_finalize(c);
+        }
+    }
+    if (n <= learnedChunkLimit_) return;
+
+    const int over = n - learnedChunkLimit_;
+    sqlite3_stmt* d = nullptr;
+    const char* sql =
+        "DELETE FROM knowledge_chunks WHERE id IN ("
+        "  SELECT id FROM knowledge_chunks WHERE source = 'learned'"
+        "  ORDER BY created ASC, id ASC LIMIT ?1)";
+    if (sqlite3_prepare_v2(db_, sql, -1, &d, nullptr) == SQLITE_OK) {
+        sqlite3_bind_int(d, 1, over);
+        sqlite3_step(d);
+        sqlite3_finalize(d);
+    }
+}
+
+std::vector<std::string> KnowledgeBase::ParseLearnNotes(const std::string& text) {
+    static const std::string key = "[learn:";
+    std::vector<std::string> notes;
+    size_t i = 0;
+    while (i < text.size()) {
+        const size_t s = text.find(key, i);
+        if (s == std::string::npos) break;
+        const size_t qs = s + key.size();
+        const size_t qe = text.find(']', qs);
+        if (qe == std::string::npos) break; // 未閉じタグ以降は無視
+        std::string note = text.substr(qs, qe - qs);
+        const size_t b = note.find_first_not_of(" \t\r\n　");
+        if (b != std::string::npos) {
+            const size_t e = note.find_last_not_of(" \t\r\n　");
+            notes.push_back(note.substr(b, e - b + 1));
+        }
+        i = qe + 1;
+    }
+    return notes;
+}
+
+std::string KnowledgeBase::StripLearnNotes(const std::string& text) {
+    static const std::string key = "[learn:";
+    std::string out;
+    size_t i = 0;
+    while (i < text.size()) {
+        const size_t s = text.find(key, i);
+        if (s == std::string::npos) { out += text.substr(i); break; }
+        out += text.substr(i, s - i);
+        const size_t e = text.find(']', s);
+        if (e == std::string::npos) break; // 未閉じタグ以降は破棄
+        i = e + 1;
+    }
+    return out;
+}
+
+const char* KnowledgeBase::LearnToolPrompt() {
+    // ファイルは /utf-8 でコンパイルされるため、生の UTF-8 日本語をそのまま記述する
+    // （\x 16進エスケープは直後の数字を巻き込み範囲外エラーになるため使わない）。
+    return
+        "## 知識の記録\n"
+        "会話の中で、後で役立つ恒久的な一般知識（事実・定義・手順など、ユーザー個人に依存しない情報）を"
+        "得たり気づいたりしたら、応答の最後に [learn: 覚えておく内容] の形式で1行ずつ記録してください。\n"
+        "- 天気・ニュース・株価など時間で変わる情報は記録しない。\n"
+        "- ユーザー個人の事実は記録しない（それは別途記憶されます）。\n"
+        "- 記録する知識がなければ [learn:] は書かなくてよい。角括弧 ] を本文に含めない。\n"
+        "例: [learn: 富士山の標高は3776mで日本最高峰]\n";
+}

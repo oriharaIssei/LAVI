@@ -47,6 +47,21 @@ public:
     /// プロンプト注入用テキスト（"## 知識ベース ..." 形式）。ヒットなしなら空文字。
     std::string BuildContext(const std::string& query, int topK = 3, float minScore = 0.30f) const;
 
+    // --- 会話中の自動収集（LLM主導 [learn:...] タグ）---
+    /// 会話で得た恒久的な一般知識を 1 件 KB に追加（source="learned"）。
+    /// 完全一致の重複はスキップ。追加後、learned 件数が上限を超えたら古い順に剪定する。
+    /// 追加したチャンク数を返す。
+    int  AddLearnedNote(const std::string& note);
+    /// 自動収集分（source="learned"）のチャンク数上限。0 以下で無制限。
+    void SetLearnedChunkLimit(int maxChunks) { learnedChunkLimit_ = maxChunks; }
+
+    /// 応答テキストから [learn: ...] の中身を全て取り出す（LLM主導の知識記録タグ）。
+    static std::vector<std::string> ParseLearnNotes(const std::string& text);
+    /// 応答テキストから [learn: ...] タグを除去する（表示・履歴保存用）。
+    static std::string StripLearnNotes(const std::string& text);
+    /// モデルへ与える「知識記録」ツールの説明プロンプト。
+    static const char* LearnToolPrompt();
+
     // --- 統計・一覧 ---
     int ChunkCount() const;
     std::vector<std::string> ListSources() const;
@@ -59,8 +74,11 @@ public:
 private:
     bool   InsertChunk(const std::string& source, const std::string& text,
                        const std::vector<float>& emb);
+    /// source="learned" のチャンク数が上限超過なら古い順に剪定する（mutex_ 取得済み前提）。
+    void   PruneLearnedToLimit();
 
     sqlite3*           db_  = nullptr;
     SentenceEmbedding* emb_ = nullptr; // 非所有
     mutable std::mutex mutex_;
+    int                learnedChunkLimit_ = 5000; // 自動収集分の上限（シード知識は対象外）
 };

@@ -23,6 +23,7 @@ public:
     void Initialize(SharedMediaContext* ctx);
     void SetMemoryPanel(MemoryPanel* memPanel);
     void SetSentenceEmbedding(SentenceEmbedding* emb) { embedding_ = emb; }
+    void SetKnowledgeBase(KnowledgeBase* kb) { knowledgeBase_ = kb; } // 知識ベースRAG（共有。所有しない）
     void SetActionPipeline(ActionPipeline* pipeline) { actionPipeline_ = pipeline; }
     void SetWebSearch(WebSearchClient* ws) { webSearch_ = ws; } // 時事Web検索（共有。所有しない）
     void SetLocation(LocationProvider* lp) { location_ = lp; }  // 現在地（共有。所有しない）
@@ -83,7 +84,9 @@ private:
 
     MemoryPanel* memoryPanel_ = nullptr;
     bool useMemoryContext_ = true;
+    bool useKnowledgeBase_ = true; // 知識ベースRAGを会話に注入するか
     SentenceEmbedding* embedding_ = nullptr;
+    KnowledgeBase* knowledgeBase_ = nullptr; // 共有。所有しない
     ActionPipeline* actionPipeline_ = nullptr;
     WebSearchClient* webSearch_ = nullptr;
     LocationProvider* location_ = nullptr;

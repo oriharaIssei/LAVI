@@ -114,6 +114,31 @@ static std::vector<int> TokenizeBpe(const std::string& text, const BpeVocab& voc
     return ids;
 }
 
+// モデルの実際の入力名に合わせて int64 入力を構築する。
+// multilingual-e5-small の ONNX エクスポートは input_ids / attention_mask に加え
+// token_type_ids(全0) を要求する版があり、入力数が合わないと OnnxInferenceEngine が
+// "input count mismatch" を返して推論に失敗する（＝埋め込み未ロードの原因）。
+static std::vector<OnnxTensorInt64> BuildTokenInputs(const OnnxInferenceEngine& engine,
+                                                     const std::vector<int64_t>& ids,
+                                                     const std::vector<int64_t>& mask) {
+    const int64_t seqLen = static_cast<int64_t>(ids.size());
+    std::vector<OnnxTensorInt64> inputs;
+    for (const auto& n : engine.InputNames()) {
+        if (n.find("mask") != std::string::npos) {
+            inputs.push_back({mask, {1, seqLen}});
+        } else if (n.find("type") != std::string::npos || n.find("segment") != std::string::npos) {
+            inputs.push_back({std::vector<int64_t>(ids.size(), 0), {1, seqLen}}); // token_type_ids=0
+        } else {
+            inputs.push_back({ids, {1, seqLen}}); // input_ids
+        }
+    }
+    if (inputs.empty()) { // 入力名が取得できない場合のフォールバック（input_ids, attention_mask）
+        inputs.push_back({ids, {1, seqLen}});
+        inputs.push_back({mask, {1, seqLen}});
+    }
+    return inputs;
+}
+
 struct SentenceEmbedding::Impl {
     OnnxInferenceEngine engine;
     BpeVocab vocab;
@@ -141,13 +166,11 @@ bool SentenceEmbedding::LoadModel(const std::wstring& modelPath, const std::stri
     auto testIds = TokenizeBpe("test", impl_->vocab);
     std::vector<int64_t> inputIds(testIds.begin(), testIds.end());
     std::vector<int64_t> attentionMask(inputIds.size(), 1);
-    int64_t seqLen = static_cast<int64_t>(inputIds.size());
 
-    OnnxTensorInt64 idsTensor{inputIds, {1, seqLen}};
-    OnnxTensorInt64 maskTensor{attentionMask, {1, seqLen}};
+    auto testInputs = BuildTokenInputs(impl_->engine, inputIds, attentionMask);
 
     std::vector<OnnxTensor> outputs;
-    if (!impl_->engine.Run({idsTensor, maskTensor}, outputs) || outputs.empty()) {
+    if (!impl_->engine.Run(testInputs, outputs) || outputs.empty()) {
         impl_->lastError = "test inference failed: " + impl_->engine.LastError();
         return false;
     }
@@ -182,13 +205,11 @@ std::vector<float> SentenceEmbedding::Encode(const std::string& text) const {
 
     std::vector<int64_t> inputIds(tokenIds.begin(), tokenIds.end());
     std::vector<int64_t> attentionMask(inputIds.size(), 1);
-    int64_t seqLen = static_cast<int64_t>(inputIds.size());
 
-    OnnxTensorInt64 idsTensor{inputIds, {1, seqLen}};
-    OnnxTensorInt64 maskTensor{attentionMask, {1, seqLen}};
+    auto inputs = BuildTokenInputs(impl_->engine, inputIds, attentionMask);
 
     std::vector<OnnxTensor> outputs;
-    if (!impl_->engine.Run({idsTensor, maskTensor}, outputs) || outputs.empty()) {
+    if (!impl_->engine.Run(inputs, outputs) || outputs.empty()) {
         return {};
     }
 

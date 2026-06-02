@@ -23,6 +23,7 @@
 #include "imgui/imgui.h"
 
 #include <filesystem>
+#include <fstream>
 
 MediaCaptureDemoSystem::MediaCaptureDemoSystem()
 	: OriGine::ISystem(OriGine::SystemCategory::Render){}
@@ -109,6 +110,13 @@ void MediaCaptureDemoSystem::Initialize(){
 	const std::filesystem::path embDir = "application/resource/embedding";
 	const std::filesystem::path modelPath = embDir / "model.onnx";
 	const std::filesystem::path vocabPath = embDir / "vocab.txt";
+	// 一時診断: 埋め込みロードの可否を lavi_trace.log に記録する（原因切り分け後に除去）。
+	{
+		std::ofstream tr("lavi_trace.log", std::ios::app);
+		if(tr) tr << "Embedding: model_exists=" << std::filesystem::exists(modelPath)
+		          << " vocab_exists=" << std::filesystem::exists(vocabPath)
+		          << " (" << embDir.string() << ")\n";
+	}
 	if(std::filesystem::exists(modelPath) && std::filesystem::exists(vocabPath)){
 		embedding_ = std::make_unique<SentenceEmbedding>();
 		if(embedding_->LoadModel(modelPath.wstring(),vocabPath.string())){
@@ -120,10 +128,15 @@ void MediaCaptureDemoSystem::Initialize(){
 			if(knowledgeBase_->Initialize("application/resource/knowledge/knowledge.db", embedding_.get())){
 				knowledgeBase_->ImportFolder("application/resource/knowledge");
 				gkManager_->SetKnowledgeBase(knowledgeBase_.get());
+				llmPanel_->SetKnowledgeBase(knowledgeBase_.get()); // 会話パネルにも RAG を統合
 			} else{
+				std::ofstream tr("lavi_trace.log", std::ios::app);
+				if(tr) tr << "KnowledgeBase Initialize FAILED (knowledge.db open?)\n";
 				knowledgeBase_.reset();
 			}
 		} else{
+			std::ofstream tr("lavi_trace.log", std::ios::app);
+			if(tr) tr << "Embedding LoadModel FAILED: " << embedding_->LastError() << "\n";
 			embedding_.reset();
 		}
 	}
