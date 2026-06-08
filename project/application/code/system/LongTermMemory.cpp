@@ -813,7 +813,9 @@ void LongTermMemory::ImportWebServiceFromHistory(const std::string& serviceName,
         [&](const WebServiceRecord& r) { return r.serviceName == serviceName; });
 
     if (it != webServices_.end()) {
-        if (it->browserProcess.empty() && !browserProcess.empty()) {
+        // 履歴から検出した最新の優先ブラウザで更新する（空のときだけ設定だと、
+        // 一度入った値が固定され、ブラウザを乗り換えても古いまま追従しない）。
+        if (!browserProcess.empty()) {
             it->browserProcess = browserProcess;
         }
     } else {

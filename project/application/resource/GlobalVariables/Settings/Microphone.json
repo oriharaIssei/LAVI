@@ -2,7 +2,7 @@
     "Microphone": {
         "AutoLoadModel": true,
         "AutoStartCapture": true,
-        "MicDeviceIndex": -1,
+        "MicDeviceIndex": 1,
         "VadModelPath": "application/resource/whisper/ggml-silero-v6.2.0.bin",
         "WhisperModelPath": "application/resource/whisper/ggml-large-v3.bin"
     }

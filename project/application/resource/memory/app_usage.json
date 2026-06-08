@@ -1,12 +1,12 @@
 [
-  {"processName":"GitHubDesktop.exe","windowTitle":"GitHub Desktop","tags":[],"launchCount":3,"totalForegroundMinutes":1.06424,"totalBackgroundMinutes":304.268,"firstSeen":"2026-05-23 21:15","lastSeen":"2026-06-06 01:08"},
-  {"processName":"WindowsTerminal.exe","windowTitle":"✳ Review todo.html documentation","tags":[],"launchCount":19,"totalForegroundMinutes":68.0361,"totalBackgroundMinutes":244.628,"firstSeen":"2026-05-23 21:15","lastSeen":"2026-05-28 15:44"},
-  {"processName":"chrome.exe","windowTitle":"無題 - Google Chrome","tags":[],"launchCount":11,"totalForegroundMinutes":8.61013,"totalBackgroundMinutes":301.446,"firstSeen":"2026-05-23 21:15","lastSeen":"2026-06-01 13:37"},
-  {"processName":"devenv.exe","windowTitle":"LAVI (実行中) - user_profile.json - Microsoft Visual Studio","tags":[],"launchCount":4,"totalForegroundMinutes":0.141763,"totalBackgroundMinutes":317.684,"firstSeen":"2026-05-23 21:15","lastSeen":"2026-06-06 01:08"},
+  {"processName":"GitHubDesktop.exe","windowTitle":"GitHub Desktop","tags":[],"launchCount":3,"totalForegroundMinutes":1.06424,"totalBackgroundMinutes":305.993,"firstSeen":"2026-05-23 21:15","lastSeen":"2026-06-08 23:16"},
+  {"processName":"WindowsTerminal.exe","windowTitle":"✳ Review todo.html documentation","tags":[],"launchCount":19,"totalForegroundMinutes":68.0361,"totalBackgroundMinutes":246.353,"firstSeen":"2026-05-23 21:15","lastSeen":"2026-06-08 23:16"},
+  {"processName":"chrome.exe","windowTitle":"無題 - Google Chrome","tags":[],"launchCount":11,"totalForegroundMinutes":8.61013,"totalBackgroundMinutes":303.171,"firstSeen":"2026-05-23 21:15","lastSeen":"2026-06-08 23:16"},
+  {"processName":"devenv.exe","windowTitle":"LAVI (実行中) - user_profile.json - Microsoft Visual Studio","tags":[],"launchCount":4,"totalForegroundMinutes":0.141763,"totalBackgroundMinutes":319.409,"firstSeen":"2026-05-23 21:15","lastSeen":"2026-06-08 23:16"},
   {"processName":"vesktop.exe","windowTitle":"• Discord | フレンド","tags":[],"launchCount":1,"totalForegroundMinutes":0,"totalBackgroundMinutes":12.6739,"firstSeen":"2026-05-23 21:15","lastSeen":"2026-05-23 21:15"},
   {"processName":"brave.exe","windowTitle":"youtube.com/results?search_query=YOASOBI ヨルシカ なとり MIX - Brave","tags":[],"launchCount":21,"totalForegroundMinutes":61.6063,"totalBackgroundMinutes":228.869,"firstSeen":"2026-05-23 21:15","lastSeen":"2026-05-28 14:38"},
-  {"processName":"Nahimic3.exe","windowTitle":"Nahimic","tags":[],"launchCount":1,"totalForegroundMinutes":0,"totalBackgroundMinutes":317.825,"firstSeen":"2026-05-23 21:15","lastSeen":"2026-06-06 01:08"},
-  {"processName":"claude.exe","windowTitle":"Claude","tags":[],"launchCount":11,"totalForegroundMinutes":21.3408,"totalBackgroundMinutes":279.324,"firstSeen":"2026-05-23 21:15","lastSeen":"2026-06-06 01:08"},
+  {"processName":"Nahimic3.exe","windowTitle":"Nahimic","tags":[],"launchCount":1,"totalForegroundMinutes":0,"totalBackgroundMinutes":319.55,"firstSeen":"2026-05-23 21:15","lastSeen":"2026-06-08 23:16"},
+  {"processName":"claude.exe","windowTitle":"Claude","tags":[],"launchCount":11,"totalForegroundMinutes":21.3408,"totalBackgroundMinutes":281.049,"firstSeen":"2026-05-23 21:15","lastSeen":"2026-06-08 23:16"},
   {"processName":"ui32.exe","windowTitle":"Wallpaper UI","tags":[],"launchCount":1,"totalForegroundMinutes":0.120751,"totalBackgroundMinutes":0,"firstSeen":"2026-05-24 09:34","lastSeen":"2026-05-24 09:34"},
   {"processName":"Discord.exe","windowTitle":"Discord","tags":[],"launchCount":1,"totalForegroundMinutes":0.248154,"totalBackgroundMinutes":173.854,"firstSeen":"2026-05-24 12:45","lastSeen":"2026-05-24 20:32"},
   {"processName":"steamwebhelper.exe","windowTitle":"Steam","tags":[],"launchCount":1,"totalForegroundMinutes":0.217165,"totalBackgroundMinutes":173.346,"firstSeen":"2026-05-24 12:45","lastSeen":"2026-05-24 20:32"},
@@ -18,5 +18,6 @@
   {"processName":"Zoom.exe","windowTitle":"Zoom Meeting","tags":[],"launchCount":2,"totalForegroundMinutes":0.485711,"totalBackgroundMinutes":75.7734,"firstSeen":"2026-05-26 09:50","lastSeen":"2026-06-02 13:05"},
   {"processName":"Codex.exe","windowTitle":"Codex","tags":[],"launchCount":1,"totalForegroundMinutes":0,"totalBackgroundMinutes":3.43034,"firstSeen":"2026-05-26 09:50","lastSeen":"2026-05-26 09:50"},
   {"processName":"XboxGameBarWidgets.exe","windowTitle":"Xbox Game Bar Widgets","tags":["ツール","作業"],"launchCount":1,"totalForegroundMinutes":0,"totalBackgroundMinutes":0.109801,"firstSeen":"2026-05-28 14:37","lastSeen":"2026-06-01 07:57"},
-  {"processName":"Taskmgr.exe","windowTitle":"タスク マネージャー","tags":[],"launchCount":1,"totalForegroundMinutes":0,"totalBackgroundMinutes":1.73491,"firstSeen":"2026-06-06 01:08","lastSeen":"2026-06-06 01:08"}
+  {"processName":"Taskmgr.exe","windowTitle":"タスク マネージャー","tags":[],"launchCount":1,"totalForegroundMinutes":0,"totalBackgroundMinutes":1.73491,"firstSeen":"2026-06-06 01:08","lastSeen":"2026-06-06 01:08"},
+  {"processName":"CLIPStudio.exe","windowTitle":"CLIP STUDIO","tags":[],"launchCount":1,"totalForegroundMinutes":0,"totalBackgroundMinutes":1.72482,"firstSeen":"2026-06-08 23:16","lastSeen":"2026-06-08 23:16"}
 ]

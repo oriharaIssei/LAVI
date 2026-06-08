@@ -2,18 +2,21 @@
 
 #include "system/ISystem.h"
 
+#include <future>
 #include <memory>
 
 class VisionAnalyzer;
+class LocalVisionAnalyzer;
 
 /// <summary>
-/// 画像解析（Claude Vision / VisionAnalyzer）を担う ECS システム。
-/// VisionAnalyzer を所有し、初期化時に config（apiKey / visionPrompt）を適用して
-/// LaviContext に公開する。消費側（VisionPanel の DEBUG UI / 将来の自律解析）は
-/// LaviContext::Get().visionAnalyzer を参照する。
+/// 画像解析を担う ECS システム。クラウド（VisionAnalyzer / Claude）と
+/// ローカル（LocalVisionAnalyzer / Qwen2.5-VL + llama.cpp libmtmd）の両方を所有し、
+/// LaviContext に公開する。消費側（VisionPanel / AutoObserveSystem）は
+/// LaviContext::Get().visionAnalyzer / .localVisionAnalyzer を参照し、
+/// GatekeeperConfig.visionUseLocal で切り替える。
 ///
-/// MediaCaptureDemoSystem（VisionPanel 所有）からの切り出し（ECS 分解）。
-/// パターンは KnowledgeSystem / ActionSystem と同じ（Initialize で生成・公開のみ）。
+/// ローカル VLM は VRAM を食うため、vision.useLocal が ON になって初めて
+/// バックグラウンドで遅延ロードする（Update で監視）。
 /// </summary>
 class VisionSystem : public OriGine::ISystem {
 public:
@@ -24,8 +27,11 @@ public:
     void Finalize() override;
 
 protected:
-    void Update() override {} // 解析は要求時に AnalyzeAsync。毎フレーム処理は不要。
+    void Update() override; // vision.useLocal 監視＝ローカル VLM の遅延ロード
 
 private:
     std::unique_ptr<VisionAnalyzer> visionAnalyzer_;
+    std::unique_ptr<LocalVisionAnalyzer> localVision_;
+    std::future<bool> loadFuture_; // ローカル VLM の非同期ロード
+    bool loadStarted_ = false;
 };

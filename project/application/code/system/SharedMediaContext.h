@@ -30,6 +30,7 @@ class TurnController;
 class LongTermMemory;
 class LocalLLM;
 class VisionAnalyzer;
+class LocalVisionAnalyzer;
 
 struct SharedMediaContext {
     AppConfigData config;
@@ -45,6 +46,7 @@ struct SharedMediaContext {
     GatekeeperManager* gkManager = nullptr;   // GatekeeperSystem 所有（会話エンジン）。各所が参照
     TurnController* turnController = nullptr; // TurnSystem が公開する発話区間検出・ターン制御
     VisionAnalyzer* visionAnalyzer = nullptr; // VisionSystem が公開する画像解析（Claude Vision）
+    LocalVisionAnalyzer* localVisionAnalyzer = nullptr; // VisionSystem が公開するローカル画像解析（Qwen2.5-VL）
 
     // キャプチャ評価系（Camera/Screen/MicGateSystem が所有・公開）。検知結果を CapturePromptComponent
     // として発行し、GatekeeperSystem が消費する。GK ポインタは GatekeeperPanel のチューニング用。
@@ -60,7 +62,8 @@ struct SharedMediaContext {
     ConversationMemory* conversationMemory = nullptr; // MemoryPanel 所有。チャット履歴表示・assistant 記録用
 
     OriGine::WebCamera* webCamera = nullptr;
-    OriGine::ScreenCapture* screenCapture = nullptr;
+    OriGine::ScreenCapture* screenCapture = nullptr; // 主モニタ（screen-diff 用・先頭）
+    std::vector<OriGine::ScreenCapture*> screenCaptures; // 撮影中の全モニタ（ScreenCaptureSystem 所有）
     std::vector<uint8_t> camFrameBuffer;
     std::vector<uint8_t> screenFrameBuffer;
 

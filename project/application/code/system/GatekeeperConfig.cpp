@@ -26,6 +26,9 @@ GatekeeperConfigData LoadGatekeeperConfig() {
     c.autoObserveWebCam   = *gv->AddValue<bool>(kScene, kGroup, "AutoObserveWebCam", c.autoObserveWebCam);
     c.autoObserveScreen   = *gv->AddValue<bool>(kScene, kGroup, "AutoObserveScreen", c.autoObserveScreen);
     c.autoObserveInterval = *gv->AddValue<float>(kScene, kGroup, "AutoObserveInterval", c.autoObserveInterval);
+    c.visionUseLocal        = *gv->AddValue<bool>(kScene, kGroup, "VisionUseLocal", c.visionUseLocal);
+    c.visionLocalModelPath  = *gv->AddValue<std::string>(kScene, kGroup, "VisionLocalModelPath", c.visionLocalModelPath);
+    c.visionLocalMmprojPath = *gv->AddValue<std::string>(kScene, kGroup, "VisionLocalMmprojPath", c.visionLocalMmprojPath);
 
     c.ferModelPath = *gv->AddValue<std::string>(kScene, kGroup, "FerModelPath", c.ferModelPath);
     c.haarPath     = *gv->AddValue<std::string>(kScene, kGroup, "HaarPath", c.haarPath);
@@ -68,6 +71,9 @@ void SaveGatekeeperConfig(const GatekeeperConfigData& c) {
     gv->SetValue(kScene, kGroup, "AutoObserveWebCam", c.autoObserveWebCam);
     gv->SetValue(kScene, kGroup, "AutoObserveScreen", c.autoObserveScreen);
     gv->SetValue(kScene, kGroup, "AutoObserveInterval", c.autoObserveInterval);
+    gv->SetValue(kScene, kGroup, "VisionUseLocal", c.visionUseLocal);
+    gv->SetValue(kScene, kGroup, "VisionLocalModelPath", c.visionLocalModelPath);
+    gv->SetValue(kScene, kGroup, "VisionLocalMmprojPath", c.visionLocalMmprojPath);
 
     gv->SetValue(kScene, kGroup, "FerModelPath", c.ferModelPath);
     gv->SetValue(kScene, kGroup, "HaarPath", c.haarPath);

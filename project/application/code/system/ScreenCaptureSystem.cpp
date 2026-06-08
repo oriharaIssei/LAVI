@@ -22,39 +22,58 @@ void ScreenCaptureSystem::RefreshMonitors() {
     monitorsLoaded_ = true;
 }
 
-void ScreenCaptureSystem::ApplySelection(int _comboIndex) {
-    if (!screenCapture_) {
-        return;
-    }
-    selectedComboIndex_ = _comboIndex;
-
-    // 一旦停止してから開き直す（0=共有しない、k>=1=monitors_[k-1]）。
-    screenCapture_->StopCapture();
-    screenCapture_->Close();
-
-    if (_comboIndex >= 1 && (_comboIndex - 1) < static_cast<int>(monitors_.size())) {
-        OriGine::Engine* engine        = OriGine::Engine::GetInstance();
-        const uint32_t monitorIndex    = monitors_[_comboIndex - 1].index;
-        if (screenCapture_->Open(engine->GetDxDevice(), engine->GetDxCommand(), monitorIndex)) {
-            screenCapture_->StartCapture();
-        }
+void ScreenCaptureSystem::OpenMonitor(uint32_t _monitorIndex) {
+    OriGine::Engine* engine = OriGine::Engine::GetInstance();
+    auto cap = std::make_unique<OriGine::ScreenCapture>();
+    if (cap->Open(engine->GetDxDevice(), engine->GetDxCommand(), _monitorIndex)) {
+        cap->StartCapture();
+        captures_.push_back(std::move(cap));
     }
 }
 
-void ScreenCaptureSystem::Initialize() {
-    screenCapture_                   = std::make_unique<OriGine::ScreenCapture>();
-    LaviContext::Get().screenCapture = screenCapture_.get();
+void ScreenCaptureSystem::PublishContext() {
+    SharedMediaContext& ctx = LaviContext::Get();
+    ctx.screenCaptures.clear();
+    ctx.screenCaptures.reserve(captures_.size());
+    for (auto& c : captures_) {
+        ctx.screenCaptures.push_back(c.get());
+    }
+    // 先頭を主モニタ（screen-diff 用）として公開。無ければ null。
+    ctx.screenCapture = captures_.empty() ? nullptr : captures_.front().get();
+}
 
-    RefreshMonitors();
+void ScreenCaptureSystem::ApplySelection(int _comboIndex) {
+    selectedComboIndex_ = _comboIndex;
 
-    // screen-diff を使う設定のときのみ既定モニタを開いて撮影開始する。
-    const GatekeeperConfigData cfg = LoadGatekeeperConfig();
-    if (cfg.screenEnabled && cfg.useScreenDiff) {
-        OriGine::Engine* engine = OriGine::Engine::GetInstance();
-        if (screenCapture_->Open(engine->GetDxDevice(), engine->GetDxCommand(), 0)) {
-            screenCapture_->StartCapture();
-            selectedComboIndex_ = 1; // 既定モニタ（一覧の先頭）を共有中
+    // 既存キャプチャを全停止・破棄してから開き直す。
+    for (auto& c : captures_) {
+        c->StopCapture();
+        c->Close();
+    }
+    captures_.clear();
+
+    if (_comboIndex == 1) {
+        // すべてのモニタを同時にキャプチャ。
+        for (const auto& m : monitors_) {
+            OpenMonitor(m.index);
         }
+    } else if (_comboIndex >= 2 && (_comboIndex - 2) < static_cast<int>(monitors_.size())) {
+        // 単一モニタ。
+        OpenMonitor(monitors_[_comboIndex - 2].index);
+    }
+    // _comboIndex == 0（共有しない）は captures_ 空のまま。
+
+    PublishContext();
+}
+
+void ScreenCaptureSystem::Initialize() {
+    RefreshMonitors();
+    PublishContext(); // 空で公開（ctx ポインタ初期化）
+
+    // screen-diff を使う設定のときのみ既定（先頭）モニタを開いて撮影開始する。
+    const GatekeeperConfigData cfg = LoadGatekeeperConfig();
+    if (cfg.screenEnabled && cfg.useScreenDiff && !monitors_.empty()) {
+        ApplySelection(2); // 先頭モニタ（コンボ index 2 = monitors_[0]）
     }
 }
 
@@ -69,10 +88,11 @@ void ScreenCaptureSystem::Update() {
                 continue;
             }
 
-            // 選択肢: 先頭に「共有しない」、続けて各モニタ名（解像度付き）。
+            // 選択肢: 「共有しない」「すべてのモニタ」、続けて各モニタ名（解像度付き）。
             combo.items.clear();
-            combo.items.reserve(monitors_.size() + 1);
+            combo.items.reserve(monitors_.size() + 2);
             combo.items.push_back("共有しない");
+            combo.items.push_back("すべてのモニタ");
             for (const auto& m : monitors_) {
                 std::string label = ConvertString(m.name);
                 label += " (" + std::to_string(m.width) + "x" + std::to_string(m.height) + ")";
@@ -91,10 +111,12 @@ void ScreenCaptureSystem::Update() {
 }
 
 void ScreenCaptureSystem::Finalize() {
-    if (screenCapture_) {
-        screenCapture_->StopCapture();
-        screenCapture_->Close();
+    for (auto& c : captures_) {
+        c->StopCapture();
+        c->Close();
     }
-    LaviContext::Get().screenCapture = nullptr;
-    screenCapture_.reset();
+    captures_.clear();
+    SharedMediaContext& ctx = LaviContext::Get();
+    ctx.screenCapture = nullptr;
+    ctx.screenCaptures.clear();
 }

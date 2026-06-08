@@ -22,6 +22,7 @@ bool* CfgFlag(GatekeeperConfigData& cfg, const std::string& role) {
     if (role == "llm.useLocal")       return &cfg.useLocalLLM;
     if (role == "llm.useWebContext")  return &cfg.useWebContext;
     if (role == "llm.autoObserve")    return &cfg.autoObserveEnabled;
+    if (role == "vision.useLocal")    return &cfg.visionUseLocal;
     return nullptr;
 }
 // role に対応する動作中 Config（GatekeeperManager）のフラグ参照を返す。未知 role は nullptr。
@@ -32,6 +33,7 @@ bool* LiveFlag(GatekeeperManager::Config& c, const std::string& role) {
     if (role == "llm.useLocal")       return &c.useLocalLLM;
     if (role == "llm.useWebContext")  return &c.useWebContext;
     if (role == "llm.autoObserve")    return &c.autoObserveEnabled;
+    if (role == "vision.useLocal")    return &c.visionUseLocal;
     return nullptr;
 }
 } // namespace

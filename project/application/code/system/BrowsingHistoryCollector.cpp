@@ -224,18 +224,32 @@ auto BrowsingHistoryCollector::FindBrowserProfiles() const -> std::vector<Browse
         const char* name;
         const char* subPath;
     };
+    // 各ブラウザの "User Data" ルート。配下の全プロファイル(Default / Profile 1 ...)を走査する
+    // （Default 固定だと、別プロファイルで使っているブラウザの履歴を取りこぼす）。
     static const BrowserInfo kBrowsers[] = {
-        {"Chrome",       "Google\\Chrome\\User Data\\Default\\History"},
-        {"Chrome Beta",  "Google\\Chrome Beta\\User Data\\Default\\History"},
-        {"Edge",         "Microsoft\\Edge\\User Data\\Default\\History"},
-        {"Brave",        "BraveSoftware\\Brave-Browser\\User Data\\Default\\History"},
-        {"Vivaldi",      "Vivaldi\\User Data\\Default\\History"},
+        {"Chrome",       "Google\\Chrome\\User Data"},
+        {"Chrome Beta",  "Google\\Chrome Beta\\User Data"},
+        {"Edge",         "Microsoft\\Edge\\User Data"},
+        {"Brave",        "BraveSoftware\\Brave-Browser\\User Data"},
+        {"Vivaldi",      "Vivaldi\\User Data"},
     };
 
     for (auto& b : kBrowsers) {
-        std::string path = localApp + "\\" + b.subPath;
-        if (fs::exists(path)) {
-            profiles.push_back({b.name, path});
+        std::string base = localApp + "\\" + b.subPath;
+        if (!fs::exists(base)) {
+            continue;
+        }
+        std::error_code ec;
+        for (const auto& entry : fs::directory_iterator(base, ec)) {
+            if (ec) break;
+            if (!entry.is_directory()) {
+                continue;
+            }
+            // プロファイルディレクトリ内に History DB があれば対象（Default, Profile *, Guest 等）。
+            const std::string histPath = entry.path().string() + "\\History";
+            if (fs::exists(histPath)) {
+                profiles.push_back({b.name, histPath});
+            }
         }
     }
     return profiles;
@@ -464,19 +478,31 @@ void BrowsingHistoryCollector::CollectServiceKeywords(
 
     // 各サービスの閲覧データをWebServiceRecordに登録
     for (auto& [service, serviceEntries] : groups) {
-        // 最も多いブラウザを特定
+        // 「最後に使ったブラウザ」を採用する。visit_count は生涯累積値で、過去に多用した
+        // ブラウザへ偏る（乗り換えても古いブラウザが勝ち続ける）ため、最近性で選ぶ。
+        // lastVisit は "%Y-%m-%d %H:%M" 形式＝辞書順が時系列順なので文字列比較でよい。
+        std::unordered_map<std::string, std::string> browserRecent; // browser -> 最新 lastVisit
         std::unordered_map<std::string, int> browserCounts;
         int totalVisits = 0;
         for (auto& e : serviceEntries) {
             if (!e.browserName.empty()) {
                 browserCounts[e.browserName] += e.visitCount;
+                auto& r = browserRecent[e.browserName];
+                if (e.lastVisit > r) r = e.lastVisit;
             }
             totalVisits += e.visitCount;
         }
         std::string topBrowser;
+        std::string topRecent;
         int topCount = 0;
-        for (auto& [bname, cnt] : browserCounts) {
-            if (cnt > topCount) { topCount = cnt; topBrowser = bname; }
+        for (auto& [bname, recent] : browserRecent) {
+            const int cnt = browserCounts[bname];
+            // 直近に使ったブラウザを優先。同時刻なら訪問数の多い方。
+            if (recent > topRecent || (recent == topRecent && cnt > topCount)) {
+                topRecent = recent;
+                topBrowser = bname;
+                topCount = cnt;
+            }
         }
         std::string browserProc = browserNameToProcess(topBrowser);
         memory->ImportWebServiceFromHistory(service, browserProc, totalVisits);

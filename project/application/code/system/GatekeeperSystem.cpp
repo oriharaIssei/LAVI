@@ -37,6 +37,7 @@ void GatekeeperSystem::Initialize() {
     mc.autoObserveWebCam   = cfg.autoObserveWebCam;
     mc.autoObserveScreen   = cfg.autoObserveScreen;
     mc.autoObserveInterval = cfg.autoObserveInterval;
+    mc.visionUseLocal      = cfg.visionUseLocal;
 
     LaviContext::Get().gkManager = gkManager_.get(); // 消費側は LaviContext 経由で参照
 }

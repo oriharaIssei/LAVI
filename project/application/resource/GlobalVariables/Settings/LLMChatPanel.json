@@ -12,6 +12,6 @@
         "UseKnowledgeBase": true,
         "UseLocalLLM": false,
         "UseMemoryContext": true,
-        "UseWhisper": false
+        "UseWhisper": true
     }
 }

@@ -29,10 +29,12 @@ protected:
 
 private:
     void RefreshMonitors();
-    // コンボ選択(0="共有しない", k>=1=モニタ)を実際のキャプチャ対象へ反映する。
+    // コンボ選択(0="共有しない", 1="すべてのモニタ", k>=2=monitors_[k-2])を実際のキャプチャ対象へ反映する。
     void ApplySelection(int _comboIndex);
+    void OpenMonitor(uint32_t _monitorIndex); // 1 モニタを開いて撮影開始し captures_ に追加
+    void PublishContext();                    // ctx.screenCapture / screenCaptures を更新
 
-    std::unique_ptr<OriGine::ScreenCapture> screenCapture_;
+    std::vector<std::unique_ptr<OriGine::ScreenCapture>> captures_; // 撮影中モニタ（複数同時可）
     std::vector<OriGine::ScreenMonitorInfo> monitors_;
     int selectedComboIndex_ = 0;  // 0 = 共有しない
     bool monitorsLoaded_    = false;

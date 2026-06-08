@@ -33,6 +33,11 @@ struct GatekeeperConfigData {
     bool autoObserveScreen   = false;
     float autoObserveInterval = 10.0f; // 観察間隔 (秒)
 
+    // --- ローカル画像処理（Qwen2.5-VL, llama.cpp + libmtmd）---
+    bool visionUseLocal = false; // 画像処理をローカル VLM で行う（false=クラウド Claude）
+    std::string visionLocalModelPath  = "application/resource/llm/models/Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf";
+    std::string visionLocalMmprojPath = "application/resource/llm/models/mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf";
+
     // --- カメラ GK (FER+) ---
     std::string ferModelPath = "application/resource/gatekeeper/emotion-ferplus-8.onnx";
     std::string haarPath     = "application/resource/gatekeeper/haarcascade_frontalface_default.xml";

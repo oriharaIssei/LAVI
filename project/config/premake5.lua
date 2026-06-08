@@ -94,6 +94,7 @@ project "LAVI"
             "$(SolutionDir)application/externals/whisper.cpp/ggml/include",
             "$(SolutionDir)application/externals/llama.cpp/include",
             "$(SolutionDir)application/externals/llama.cpp/ggml/include",
+            "$(SolutionDir)application/externals/llama.cpp/tools/mtmd", -- libmtmd (Qwen2.5-VL 等のローカル画像処理)
             "$(SolutionDir)application/externals/curl/include",
             "$(SolutionDir)application/externals/onnxruntime/include",
             "$(SolutionDir)application/externals/opencv/include",
@@ -108,7 +109,7 @@ project "LAVI"
     libdirs { "application/externals/onnxruntime/lib" }
     libdirs { "application/externals/opencv/lib" }
     links(table.join(
-        { "OriGine", "whisper", "llama", "ggml", "ggml-base", "ggml-cpu", "ggml-cuda", "cudart_static", "cublas", "cublasLt", "cuda",
+        { "OriGine", "mtmd", "whisper", "llama", "ggml", "ggml-base", "ggml-cpu", "ggml-cuda", "cudart_static", "cublas", "cublasLt", "cuda",
           "libcurl", "xaudio2", "onnxruntime", "sqlite3", "RuntimeObject" }, -- RuntimeObject: C++/WinRT 位置情報用
         getEngineLinks()
     ))
@@ -124,6 +125,7 @@ project "LAVI"
             "application/externals/llama.cpp/build_cuda_debug/src",
             "application/externals/llama.cpp/build_cuda_debug/ggml/src",
             "application/externals/llama.cpp/build_cuda_debug/ggml/src/ggml-cuda",
+            "application/externals/llama.cpp/build_cuda_debug/tools/mtmd",
         }
     filter "configurations:Develop or Release"
         libdirs {
@@ -133,6 +135,7 @@ project "LAVI"
             "application/externals/llama.cpp/build_cuda_release/src",
             "application/externals/llama.cpp/build_cuda_release/ggml/src",
             "application/externals/llama.cpp/build_cuda_release/ggml/src/ggml-cuda",
+            "application/externals/llama.cpp/build_cuda_release/tools/mtmd",
         }
     filter {}
 

@@ -3,6 +3,7 @@
 #include "system/ISystem.h"
 
 #include "LLMClient.h"
+#include "VisionAnalyzer.h" // VisionResult（ローカル経路の戻り型）
 
 #include <chrono>
 #include <future>
@@ -29,7 +30,9 @@ protected:
 
 private:
     LLMClient llm_;                                  // クラウド Vision 呼び出し（自前所有）
-    std::future<LLMResponse> future_;
+    std::future<LLMResponse> future_;                // クラウド経路の結果
+    std::future<VisionResult> localFuture_;          // ローカル経路（Qwen2.5-VL）の結果
     bool busy_ = false;                              // 観察リクエスト処理中か
+    bool busyLocal_ = false;                         // 処理中リクエストがローカル経路か
     std::chrono::steady_clock::time_point lastTime_; // 直近の観察時刻
 };

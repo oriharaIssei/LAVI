@@ -72,6 +72,8 @@ public:
         bool autoObserveWebCam   = true;
         bool autoObserveScreen   = false;
         float autoObserveInterval = 10.0f; // 観察間隔 (秒)
+
+        bool visionUseLocal = false; // 画像処理をローカル VLM(Qwen2.5-VL) で行う（false=クラウド）
     };
 
     GatekeeperManager();

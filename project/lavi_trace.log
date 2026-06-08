@@ -86,3 +86,9 @@ Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
 Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
 Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
 Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+23:14:50 LoadModel: nGpuLayers=99 devices=2
+23:14:50   dev[0]=CUDA0 type=GPU
+23:14:50   dev[1]=CPU type=CPU
+23:14:50   => GPU backend present (offload OK)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)

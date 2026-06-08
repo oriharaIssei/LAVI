@@ -205,6 +205,12 @@ endif()
 
 add_subdirectory(src)
 
+# LAVI: プロセス内ビジョン（Qwen2.5-VL 等）用に libmtmd（ライブラリのみ）を常時ビルドする。
+# CLI/common には依存しない（tools/mtmd/CMakeLists.txt はトリミング済み）。
+if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tools/mtmd/CMakeLists.txt)
+    add_subdirectory(tools/mtmd)
+endif()
+
 #
 # utils, programs, examples and tests
 #
