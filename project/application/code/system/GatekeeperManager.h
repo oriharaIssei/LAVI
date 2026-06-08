@@ -14,7 +14,6 @@
 
 struct SharedMediaContext;
 class LongTermMemory;
-class SentenceEmbedding;
 class KnowledgeBase;
 class WebSearchClient;
 class ActionPipeline;
@@ -67,6 +66,12 @@ public:
         bool autoSpeak = true;         // 応答を VoiceVox で発話するか
         bool useLocalLLM = true;       // 応答生成にローカル LLM を使う（未ロード時はクラウドへフォールバック）
         bool useWebContext = true;     // 時事クエリ検出時に Web 検索結果を文脈注入する（時事対策）
+
+        // 自律観察（AutoObserveSystem）: 一定間隔でカメラ/画面を見て自発的にコメントする。
+        bool autoObserveEnabled  = false;
+        bool autoObserveWebCam   = true;
+        bool autoObserveScreen   = false;
+        float autoObserveInterval = 10.0f; // 観察間隔 (秒)
     };
 
     GatekeeperManager();
@@ -76,24 +81,26 @@ public:
     GatekeeperManager& operator=(const GatekeeperManager&) = delete;
 
     void Initialize(SharedMediaContext* ctx);
-    void SetLongTermMemory(LongTermMemory* mem) { longTermMemory_ = mem; }
-    void SetSentenceEmbedding(SentenceEmbedding* emb) { embedding_ = emb; }
-    void SetKnowledgeBase(KnowledgeBase* kb) { knowledgeBase_ = kb; }
-    void SetWebSearch(WebSearchClient* ws) { webSearch_ = ws; }
-    void SetActionPipeline(ActionPipeline* pipeline) { actionPipeline_ = pipeline; }
-    void SetLocalLLM(LocalLLM* llm) { localLLM_ = llm; }
+    // 共有依存はすべて各 System が LaviContext に公開し、判定処理の入口で遅延参照する（Set 廃止）：
+    //   LongTermMemory/LocalLLM=MemoryPanel, 埋め込み/知識ベース=KnowledgeSystem,
+    //   時事Web検索=WebSearchSystem, アクション実行=ActionSystem。
     void Update();  // MediaCaptureDemoSystem::Update から毎フレーム呼ぶ
 
-    CameraGatekeeper* Camera() { return camera_.get(); }
-    ScreenGatekeeper* Screen() { return screen_.get(); }
-    MicGatekeeper* Mic() { return mic_.get(); }
+    // GK 本体・結果・フレーム寸法は Camera/Screen/MicGateSystem が所有し LaviContext に公開する。
+    // 互換のためアクセサは維持し、中身は ctx を参照する（GatekeeperPanel/MemoryPanel は無改修）。
+    CameraGatekeeper* Camera();
+    ScreenGatekeeper* Screen();
+    MicGatekeeper* Mic();
 
-    const EmotionResult& CameraResult() const { return camResult_; }
-    const ScreenGateResult& ScreenResult() const { return screenResult_; }
-    const MicGateResult& MicResult() const { return micResult_; }
+    const EmotionResult& CameraResult() const;
+    const ScreenGateResult& ScreenResult() const;
+    const MicGateResult& MicResult() const;
 
-    uint32_t CameraFrameWidth() const { return lastCamW_; }
-    uint32_t CameraFrameHeight() const { return lastCamH_; }
+    uint32_t CameraFrameWidth() const;
+    uint32_t CameraFrameHeight() const;
+
+    // キャプチャ System が発行した CapturePromptComponent を 1 件取り込む（GatekeeperSystem が駆動）。
+    void IngestPrompt(GateSource src, std::string desc);
 
     Config& config() { return config_; }
     const std::vector<GateEvent>& Events() const { return events_; }
@@ -107,6 +114,11 @@ public:
     // 発話区間検出で確定したユーザー発話(ctx_->transcribedText)を
     // 会話としてゲートキーパー経由で LLM へ送出する（自動ターン応答用）。
     void RespondToSpeech();
+
+    // 自律観察など外部 System が生成した LAVI 発話を、会話メモリ記録＋発話（VoiceVox）に流す。
+    // 安全のためアクション（[action:]/[browser:]）は実行しない（自発観察での暴発防止）。
+    void SpeakProactive(const std::string& content);
+
     bool LlmBusy() const { return llmBusy_; }
     const std::string& LastResponse() const { return lastResponse_; }
 
@@ -126,25 +138,13 @@ private:
 
     SharedMediaContext* ctx_ = nullptr;
 
-    std::unique_ptr<CameraGatekeeper> camera_;
-    std::unique_ptr<ScreenGatekeeper> screen_;
-    std::unique_ptr<MicGatekeeper> mic_;
-
+    // GK 本体・評価結果・評価間隔の状態は Camera/Screen/MicGateSystem へ移譲（ECS 分解）。
     Config config_;
-
-    double lastCam_ = 0.0, lastScreen_ = 0.0, lastMic_ = 0.0;
-
-    EmotionResult camResult_;
-    ScreenGateResult screenResult_;
-    MicGateResult micResult_;
 
     std::vector<GateEvent> events_;    // 直近の出来事 (上限あり)
     std::vector<GateEvent> pending_;   // 合成待ち
     double pendingStart_ = 0.0;
     std::vector<RouteDecision> decisions_;  // 直近の判断 (上限あり)
-
-    uint32_t lastCamW_ = 0, lastCamH_ = 0;
-    uint32_t lastScreenW_ = 0, lastScreenH_ = 0;
 
     // LLM 送出 (エスカレーション)
     LLMClient llm_;                          // クラウド (Claude)
@@ -155,8 +155,7 @@ private:
     std::string lastResponse_;
     double lastEscalate_ = -1.0e9;
     LongTermMemory* longTermMemory_ = nullptr;
-    SentenceEmbedding* embedding_ = nullptr;
-    KnowledgeBase* knowledgeBase_ = nullptr;  // 知識ベース RAG（共有インスタンス。所有しない）
+    KnowledgeBase* knowledgeBase_ = nullptr;  // 知識ベース RAG（共有。KnowledgeSystem 公開。入口で LaviContext から引く）
     WebSearchClient* webSearch_ = nullptr;    // Web 検索（時事対策。共有インスタンス。所有しない）
-    ActionPipeline* actionPipeline_ = nullptr;
+    ActionPipeline* actionPipeline_ = nullptr; // 共有。ActionSystem 公開。入口で LaviContext から引く
 };

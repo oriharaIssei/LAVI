@@ -1,5 +1,6 @@
 #include "MediaCaptureDemoSystem.h"
 #include "SharedMediaContext.h"
+#include "LaviContext.h"
 #include "AppConfig.h"
 #include "MicrophonePanel.h"
 #include "WebCameraPanel.h"
@@ -9,13 +10,10 @@
 #include "LLMChatPanel.h"
 #include "GatekeeperManager.h"
 #include "GatekeeperPanel.h"
+#include "TurnController.h" // DrawTurnControlUI が TurnController/TurnConfig/TurnState を参照
 #include "MemoryPanel.h"
-#include "SentenceEmbedding.h"
 #include "KnowledgeBase.h"
-#include "WebSearchClient.h"
-#include "LocationProvider.h"
 #include "WebAction.h"
-#include "system/action/ActionPipeline.h"
 #include "winApp/WinApp.h"
 
 #include "Engine.h"
@@ -31,151 +29,67 @@ MediaCaptureDemoSystem::MediaCaptureDemoSystem()
 MediaCaptureDemoSystem::~MediaCaptureDemoSystem() = default;
 
 void MediaCaptureDemoSystem::Initialize(){
-	ctx_ = std::make_unique<SharedMediaContext>();
-	ctx_->config = LoadAppConfig();
+	ctx_ = &LaviContext::Get(); // 共有状態はシングルトンサービスで一元管理（非所有）
+	// config ロード・タグ軸ロード・ホットキー登録・システムトレイ初期化は AppLifecycleSystem(Initialize) へ移譲（ECS 分解、Release 稼働化）。
 
-	micPanel_ = std::make_unique<MicrophonePanel>();
+	// MicrophonePanel の所有・駆動は MicrophoneSystem(Input) へ移譲（ECS 分解）。共有は LaviContext::Get().micPanel 経由。
 	camPanel_ = std::make_unique<WebCameraPanel>();
 	screenPanel_ = std::make_unique<ScreenCapturePanel>();
 	voiceVoxPanel_ = std::make_unique<VoiceVoxPanel>();
 	visionPanel_ = std::make_unique<VisionPanel>();
 	llmPanel_ = std::make_unique<LLMChatPanel>();
-	gkManager_ = std::make_unique<GatekeeperManager>();
 	gkPanel_ = std::make_unique<GatekeeperPanel>();
-	memoryPanel_ = std::make_unique<MemoryPanel>();
+	// MemoryPanel の所有・駆動は MemorySystem(Movement) へ移譲（ECS 分解）。共有は LaviContext::Get().memoryPanel 経由。
 
-	micPanel_->Initialize(ctx_.get());
-	camPanel_->Initialize(ctx_.get());
-	screenPanel_->Initialize(ctx_.get());
-	voiceVoxPanel_->Initialize(ctx_.get());
-	visionPanel_->Initialize(ctx_.get());
-	llmPanel_->Initialize(ctx_.get());
-	gkManager_->Initialize(ctx_.get());
-	gkPanel_->Initialize(ctx_.get(),gkManager_.get());
-	memoryPanel_->Initialize(ctx_.get(),gkManager_.get());
-	llmPanel_->SetMemoryPanel(memoryPanel_.get());
-	gkManager_->SetLongTermMemory(memoryPanel_->GetLongTermMemory());
-	gkManager_->SetLocalLLM(memoryPanel_->GetLocalLLM()); // 自動音声応答もローカル LLM で（共有）
+	camPanel_->Initialize(ctx_);
+	screenPanel_->Initialize(ctx_);
+	voiceVoxPanel_->Initialize(ctx_);
+	visionPanel_->Initialize(ctx_);
+	llmPanel_->Initialize(ctx_);
+	// GatekeeperManager は GatekeeperSystem(Movement) が所有・駆動（ECS 分解）。
+	// gkPanel/memoryPanel は使用時(Draw/Update)に LaviContext::Get().gkManager を遅延 pull する。
+	gkPanel_->Initialize(ctx_);
+	// MemoryPanel は MemorySystem が生成・公開する。System 初期化順は非決定のため、
+	// llmPanel_->SetMemoryPanel は Initialize ではなく Update で毎フレーム ctx から渡す。
 
-	// 発話区間検出・ターン制御
-	turnController_ = std::make_unique<TurnController>();
-	turnController_->LoadConfig("application/resource/turn/turn_config.json");
-	turnController_->SetOnUserSpeechStart([this]() {
-		// 発話開始: このターン分の音声を取り直すためバッファをクリア
-		micPanel_->ClearAudioBuffer();
-	});
-	turnController_->SetOnUserSpeechEnd([this]() {
-		// 発話終了: 自動で転写を開始（結果は MicrophonePanel が ctx_->transcribedText に反映）
-		micPanel_->RequestTranscribe();
-	});
-	turnController_->SetOnBargeIn([this]() {
-		// LAVI 発話中にユーザーが割り込んだ → TTS を即停止してユーザーを優先
-		if(ctx_->voiceVox){
-			ctx_->voiceVox->Stop();
-		}
-		ctx_->isSpeaking = false;
-		// （この直後に onUserSpeechStart が呼ばれ、音声バッファはクリアされる）
-	});
-	lastTurnTick_ = std::chrono::steady_clock::now();
+	// マイク入力・転写は MicrophoneSystem(Input) へ、発話区間検出・ターン制御は TurnSystem(StateTransition) へ移譲（ECS 分解）。
+	// micPanel は MicrophoneSystem が LaviContext::Get().micPanel に公開し TurnSystem 等が参照する。
 
-	LoadTagAxes("application/resource/memory/tag_axes.json");
+	// config/タグ軸ロード・ホットキー登録・システムトレイは AppLifecycleSystem(Initialize) へ移譲（ECS 分解）。
+	// アクション実行(ActionPipeline) は ActionSystem が担当（ECS 分解）。消費側は LaviContext::Get().actionPipeline を参照する。
+	// Web 検索は WebSearchSystem が担当（ECS 分解）。消費側は LaviContext::Get().webSearch を参照する。
 
-	actionPipeline_ = std::make_unique<ActionPipeline>();
-	actionPipeline_->LoadConfig("application/resource/action/tools.json");
-	llmPanel_->SetActionPipeline(actionPipeline_.get());
-	gkManager_->SetActionPipeline(actionPipeline_.get());
+	// 現在地は LocationSystem が担当（ECS 分解）。LLMChatPanel は LaviContext::Get().location を参照する。
 
-	// Web 検索（時事対策）。時事キーワードは JSON から読み込む（無ければ既定値）。
-	webSearch_ = std::make_unique<WebSearchClient>();
-	webSearch_->LoadKeywords("application/resource/web/current_events.json");
-	gkManager_->SetWebSearch(webSearch_.get());
-	llmPanel_->SetWebSearch(webSearch_.get());
-
-	// 現在地（Windows 位置情報→逆ジオコーディング）をバックグラウンドで取得開始。
-	location_ = std::make_unique<LocationProvider>();
-	location_->Start();
-	llmPanel_->SetLocation(location_.get());
-
-	// ホットキー登録 (Engine API)
-	auto* winApp = OriGine::Engine::GetInstance()->GetWinApp();
-	if(ctx_->hotkeyEnabled){
-		hotkeyRegistered_ = winApp->RegisterGlobalHotkey(1,ctx_->hotkeyModifiers,ctx_->hotkeyVk);
-	}
-
-	// システムトレイ
-	winApp->EnableSystemTray(L"LAVI");
-	winApp->SetMinimizeToTrayOnClose(ctx_->config.minimizeToTrayOnClose);
-
-	// Sentence Embedding (存在すれば読み込み)
-	const std::filesystem::path embDir = "application/resource/embedding";
-	const std::filesystem::path modelPath = embDir / "model.onnx";
-	const std::filesystem::path vocabPath = embDir / "vocab.txt";
-	// 一時診断: 埋め込みロードの可否を lavi_trace.log に記録する（原因切り分け後に除去）。
-	{
-		std::ofstream tr("lavi_trace.log", std::ios::app);
-		if(tr) tr << "Embedding: model_exists=" << std::filesystem::exists(modelPath)
-		          << " vocab_exists=" << std::filesystem::exists(vocabPath)
-		          << " (" << embDir.string() << ")\n";
-	}
-	if(std::filesystem::exists(modelPath) && std::filesystem::exists(vocabPath)){
-		embedding_ = std::make_unique<SentenceEmbedding>();
-		if(embedding_->LoadModel(modelPath.wstring(),vocabPath.string())){
-			gkManager_->SetSentenceEmbedding(embedding_.get());
-			llmPanel_->SetSentenceEmbedding(embedding_.get());
-
-			// 知識ベース RAG: 埋め込み共有 + SQLite。起動時に knowledge/ フォルダを取り込む。
-			knowledgeBase_ = std::make_unique<KnowledgeBase>();
-			if(knowledgeBase_->Initialize("application/resource/knowledge/knowledge.db", embedding_.get())){
-				knowledgeBase_->ImportFolder("application/resource/knowledge");
-				gkManager_->SetKnowledgeBase(knowledgeBase_.get());
-				llmPanel_->SetKnowledgeBase(knowledgeBase_.get()); // 会話パネルにも RAG を統合
-			} else{
-				std::ofstream tr("lavi_trace.log", std::ios::app);
-				if(tr) tr << "KnowledgeBase Initialize FAILED (knowledge.db open?)\n";
-				knowledgeBase_.reset();
-			}
-		} else{
-			std::ofstream tr("lavi_trace.log", std::ios::app);
-			if(tr) tr << "Embedding LoadModel FAILED: " << embedding_->LastError() << "\n";
-			embedding_.reset();
-		}
-	}
+	// 埋め込み(SentenceEmbedding)と知識ベース RAG(KnowledgeBase) は KnowledgeSystem へ移譲（ECS 分解）。
+	// 消費側は LaviContext::Get().knowledgeBase / .embedding を参照する。
 }
 
 void MediaCaptureDemoSystem::Finalize(){
-	auto* winApp = OriGine::Engine::GetInstance()->GetWinApp();
-	if(hotkeyRegistered_){
-		winApp->UnregisterGlobalHotkey(1);
-		hotkeyRegistered_ = false;
-	}
-	winApp->DisableSystemTray();
+	// ホットキー解除・システムトレイ終了は AppLifecycleSystem(Finalize) へ移譲（ECS 分解）。
 
-	memoryPanel_->Finalize();
+	// micPanel は MicrophoneSystem、memoryPanel は MemorySystem が所有・解放する（ECS 分解）。
 	gkPanel_->Finalize();
 	llmPanel_->Finalize();
 	visionPanel_->Finalize();
 	voiceVoxPanel_->Finalize();
 	screenPanel_->Finalize();
 	camPanel_->Finalize();
-	micPanel_->Finalize();
 
-	memoryPanel_.reset();
 	gkPanel_.reset();
-	gkManager_.reset();
-	if(knowledgeBase_){ knowledgeBase_->Finalize(); knowledgeBase_.reset(); }
-	webSearch_.reset();
-	location_.reset();
 	llmPanel_.reset();
 	visionPanel_.reset();
 	voiceVoxPanel_.reset();
 	screenPanel_.reset();
 	camPanel_.reset();
-	micPanel_.reset();
-	ctx_.reset();
+	ctx_ = nullptr; // シングルトン（LaviContext）は所有しないので破棄しない
 }
 
 void MediaCaptureDemoSystem::DrawTurnControlUI(){
+	// 所有は TurnSystem/GatekeeperSystem。UI は LaviContext から共有インスタンスを引いて表示する（ECS 分解）。
+	TurnController* turnController_ = LaviContext::Get().turnController;
 	if(!turnController_) return;
+	GatekeeperManager* gkManager_ = LaviContext::Get().gkManager; // null の可能性あり（下で個別ガード）
 
 	if(ImGui::CollapsingHeader("Turn Control (発話区間検出)")){
 		TurnConfig& cfg = turnController_->Config();
@@ -198,16 +112,18 @@ void MediaCaptureDemoSystem::DrawTurnControlUI(){
 		ImGui::Checkbox("Barge-in##turn", &cfg.bargeInEnabled);
 
 		// 自動音声応答の LLM バックエンド（GateKeeper 経由）
-		ImGui::Checkbox("Voice via Local LLM##turn", &gkManager_->config().useLocalLLM);
-		ImGui::SameLine();
-		ImGui::TextDisabled(gkManager_->config().useLocalLLM
-			? "(未ロード時はクラウドへフォールバック)"
-			: "(クラウド Claude を使用)");
+		if(gkManager_){
+			ImGui::Checkbox("Voice via Local LLM##turn", &gkManager_->config().useLocalLLM);
+			ImGui::SameLine();
+			ImGui::TextDisabled(gkManager_->config().useLocalLLM
+				? "(未ロード時はクラウドへフォールバック)"
+				: "(クラウド Claude を使用)");
 
-		// 時事対策: 鮮度クエリ検出時に Web 検索結果を文脈注入（ローカルは自前fetch / クラウドはweb_search）
-		ImGui::Checkbox("Web Context (時事対策)##turn", &gkManager_->config().useWebContext);
-		ImGui::SameLine();
-		ImGui::TextDisabled("「最新/今日/ニュース」等で自動的に Web 検索を文脈注入");
+			// 時事対策: 鮮度クエリ検出時に Web 検索結果を文脈注入（ローカルは自前fetch / クラウドはweb_search）
+			ImGui::Checkbox("Web Context (時事対策)##turn", &gkManager_->config().useWebContext);
+			ImGui::SameLine();
+			ImGui::TextDisabled("「最新/今日/ニュース」等で自動的に Web 検索を文脈注入");
+		}
 
 		// 閉じるボタンの挙動: ON=トレイに常駐 / OFF=×で通常終了。即時反映＋保存。
 		if(ImGui::Checkbox("閉じるボタンでトレイに最小化##tray", &ctx_->config.minimizeToTrayOnClose)){
@@ -245,6 +161,8 @@ void MediaCaptureDemoSystem::DrawTurnControlUI(){
 void MediaCaptureDemoSystem::DrawKnowledgeBaseUI(){
 	if(!ImGui::CollapsingHeader("Knowledge Base (知識ベース RAG)")) return;
 
+	// 所有は KnowledgeSystem。UI は LaviContext から共有インスタンスを引いて表示する（ECS 分解）。
+	KnowledgeBase* knowledgeBase_ = LaviContext::Get().knowledgeBase;
 	if(!knowledgeBase_ || !knowledgeBase_->IsReady()){
 		ImGui::TextDisabled("埋め込みモデル未ロードのため無効です（application/resource/embedding）。");
 		return;
@@ -305,78 +223,17 @@ void MediaCaptureDemoSystem::DrawKnowledgeBaseUI(){
 }
 
 void MediaCaptureDemoSystem::Update(){
-	if(ctx_->isSpeaking && ctx_->speakFuture.valid() &&
-	   ctx_->speakFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready){
-		ctx_->speakFuture.get();
-		ctx_->isSpeaking = false;
-	}
+	// TTS 完了処理・発話区間検出・ターン制御・発話→自動送信は TurnSystem(StateTransition) へ移譲（ECS 分解）。
+	// ウェイクワード検出は WakeWordSystem(Input) へ移譲。共有は LaviContext 経由。
 
-	// 発話区間検出・ターン制御の駆動（メインスレッドで毎フレーム）
-	{
-		auto now = std::chrono::steady_clock::now();
-		float dt = std::chrono::duration<float>(now - lastTurnTick_).count();
-		lastTurnTick_ = now;
-		if(dt > 0.5f) dt = 0.5f; // 初回や停止後のスパイクをクランプ
+	// マイク転写(MicrophoneSystem) / 記憶(MemorySystem) の機能 Update は各 System(常時稼働) へ移譲（ECS 分解）。
+	// 当 System は DEBUG 限定の調整 UI 描画のみを担う。共有インスタンスは LaviContext から pull する。
+	MicrophonePanel* micPanel_  = LaviContext::Get().micPanel;
+	MemoryPanel* memoryPanel_   = LaviContext::Get().memoryPanel;
+	llmPanel_->SetMemoryPanel(memoryPanel_); // System 初期化順非依存に毎フレーム最新を渡す
 
-		if(micPanel_->IsCapturing()){
-			turnController_->Update(micPanel_->GetCurrentLevel(), dt, ctx_->isSpeaking);
-		}
-
-		// LAVI 発話状態(isSpeaking)のエッジでターン状態を遷移
-		if(ctx_->isSpeaking && !prevSpeaking_) turnController_->NotifyResponseStarted();
-		if(!ctx_->isSpeaking && prevSpeaking_) turnController_->NotifyResponseEnded();
-		prevSpeaking_ = ctx_->isSpeaking;
-
-		// 応答が来ない場合に Processing で固まらないようにする取りこぼし対策
-		if(turnController_->State() == TurnState::Processing){
-			if(!processingActive_){ processingActive_ = true; processingSince_ = now; }
-			else if(!ctx_->isSpeaking && !gkManager_->LlmBusy() &&
-					std::chrono::duration<float>(now - processingSince_).count() > 8.0f){
-				// 応答が来ない場合のみ待機へ戻す（LLM 処理中は待つ）
-				turnController_->Reset();
-				processingActive_ = false;
-			}
-		} else {
-			processingActive_ = false;
-		}
-	}
-
-	// ウェイクワード検出
-	if(ctx_->wakeWordEnabled && !ctx_->wakeWord.empty() &&
-	   !ctx_->transcribedText.empty() && ctx_->transcribedText != lastWakeWordText_){
-		std::string newPart;
-		if(lastWakeWordText_.empty() || ctx_->transcribedText.size() <= lastWakeWordText_.size()){
-			newPart = ctx_->transcribedText;
-		} else{
-			newPart = ctx_->transcribedText.substr(lastWakeWordText_.size());
-		}
-		lastWakeWordText_ = ctx_->transcribedText;
-
-		if(newPart.find(ctx_->wakeWord) != std::string::npos){
-			auto* wa = OriGine::Engine::GetInstance()->GetWinApp();
-			if(wa->IsMinimizedToTray()){
-				wa->RestoreFromTray();
-			} else{
-				::ShowWindow(wa->GetHwnd(),SW_RESTORE);
-				::SetForegroundWindow(wa->GetHwnd());
-			}
-		}
-	}
-
-	// UI のタブ選択に関係なく毎フレーム実行する処理
-	micPanel_->Update();   // 転写/校正/集約の完了取り込み（自動転写のため必須）
-
-	// 発話区間検出で確定 → 転写完了したら、GateKeeper 経由で LLM へ自動送信
-	if(turnController_->State() == TurnState::Processing &&
-	   !ctx_->transcribedText.empty() &&
-	   ctx_->transcribedText != lastTurnTranscript_ &&
-	   !gkManager_->LlmBusy()){
-		lastTurnTranscript_ = ctx_->transcribedText;
-		gkManager_->RespondToSpeech();
-	}
-
-	gkManager_->Update();
-	memoryPanel_->Update();
+	// GatekeeperManager の駆動は GatekeeperSystem(Movement) へ移譲（ECS 分解）。
+	gkPanel_->SyncOnce(); // GK 既定パラメータの初回反映（Gatekeeper タブ非選択でも確実に反映）
 
 	ImGui::Begin("Media Capture Demo");
 
@@ -385,7 +242,7 @@ void MediaCaptureDemoSystem::Update(){
 
 	if(ImGui::BeginTabBar("MediaTabs")){
 		if(ImGui::BeginTabItem("Microphone")){
-			micPanel_->Draw();
+			if(micPanel_) micPanel_->Draw();
 			ImGui::EndTabItem();
 		}
 		if(ImGui::BeginTabItem("WebCamera")){
@@ -413,7 +270,7 @@ void MediaCaptureDemoSystem::Update(){
 			ImGui::EndTabItem();
 		}
 		if(ImGui::BeginTabItem("Memory")){
-			memoryPanel_->Draw();
+			if(memoryPanel_) memoryPanel_->Draw();
 			ImGui::EndTabItem();
 		}
 		ImGui::EndTabBar();

@@ -1,6 +1,8 @@
 #include "GatekeeperManager.h"
 #include "SharedMediaContext.h"
+#include "LaviContext.h"
 #include "EmotionTag.h"
+#include "ConversationMemory.h" // 応答をチャット履歴(会話メモリ)へ記録
 #include "WebAction.h"
 #include "LongTermMemory.h"
 #include "KnowledgeBase.h"
@@ -16,14 +18,7 @@
 #include <cstdio>
 
 namespace {
-std::string Join(const std::vector<std::string>& v, const char* sep) {
-    std::string out;
-    for (size_t i = 0; i < v.size(); ++i) {
-        if (i) out += sep;
-        out += v[i];
-    }
-    return out;
-}
+// （Join はキャプチャ評価とともに Screen/MicGateSystem へ移譲したため削除）
 
 // 発話用にタグ類 ([joy] [thinking] 等の角括弧表記) を除去する。
 // 表示テキストはそのまま、音声に渡すテキストだけクリーンにするために使う。
@@ -44,15 +39,26 @@ std::string SanitizeForSpeech(const std::string& in) {
 }
 }  // namespace
 
-GatekeeperManager::GatekeeperManager()
-    : camera_(std::make_unique<CameraGatekeeper>()),
-      screen_(std::make_unique<ScreenGatekeeper>()),
-      mic_(std::make_unique<MicGatekeeper>()) {}
+GatekeeperManager::GatekeeperManager() = default; // GK 本体は Camera/Screen/MicGateSystem が所有（ECS 分解）
 
 GatekeeperManager::~GatekeeperManager() = default;
 
 void GatekeeperManager::Initialize(SharedMediaContext* ctx) {
     ctx_ = ctx;
+}
+
+// --- ECS 分解後のアクセサ: GK 本体/結果/寸法は LaviContext(ctx_) 経由で参照する ---
+CameraGatekeeper* GatekeeperManager::Camera() { return ctx_ ? ctx_->cameraGate : nullptr; }
+ScreenGatekeeper* GatekeeperManager::Screen() { return ctx_ ? ctx_->screenGate : nullptr; }
+MicGatekeeper* GatekeeperManager::Mic() { return ctx_ ? ctx_->micGate : nullptr; }
+const EmotionResult& GatekeeperManager::CameraResult() const { return ctx_->camResult; }
+const ScreenGateResult& GatekeeperManager::ScreenResult() const { return ctx_->screenResult; }
+const MicGateResult& GatekeeperManager::MicResult() const { return ctx_->micResult; }
+uint32_t GatekeeperManager::CameraFrameWidth() const { return ctx_ ? ctx_->camFrameW : 0; }
+uint32_t GatekeeperManager::CameraFrameHeight() const { return ctx_ ? ctx_->camFrameH : 0; }
+
+void GatekeeperManager::IngestPrompt(GateSource src, std::string desc) {
+    PushEvent(src, std::move(desc), NowSec()); // 時刻は本クラスのクロックで一貫させる
 }
 
 double GatekeeperManager::NowSec() const {
@@ -75,68 +81,9 @@ void GatekeeperManager::Update() {
 
     PollLlm();  // 進行中の Claude 応答を回収・発話
 
-    // --- カメラ (表情変化) ---
-    if (config_.camEnabled && camera_->IsReady() && now - lastCam_ >= config_.camInterval) {
-        lastCam_ = now;
-        if (ctx_->webCamera && ctx_->webCamera->IsCapturing()) {
-            uint32_t fw = 0, fh = 0;
-            if (ctx_->webCamera->GetLatestFrame(ctx_->camFrameBuffer, fw, fh) && fw > 0 && fh > 0) {
-                lastCamW_ = fw;
-                lastCamH_ = fh;
-                camResult_ = camera_->Evaluate(ctx_->camFrameBuffer.data(), fw, fh);
-                if (camera_->ShouldTrigger(camResult_)) {
-                    PushEvent(GateSource::Camera,
-                              std::string("表情が ") +
-                                  CameraGatekeeper::EmotionName(camResult_.dominant) + " に変化",
-                              now);
-                }
-            }
-        }
-    }
-
-    // --- 画面 (プロセス変化 / 画面差分) ---
-    if (config_.screenEnabled && now - lastScreen_ >= config_.screenInterval) {
-        lastScreen_ = now;
-        const uint8_t* data = nullptr;
-        uint32_t fw = 0, fh = 0;
-        if (ctx_->screenCapture && ctx_->screenCapture->IsCapturing()) {
-            if (ctx_->screenCapture->GetLatestFrame(ctx_->screenFrameBuffer, fw, fh) && fw > 0 && fh > 0) {
-                data = ctx_->screenFrameBuffer.data();
-                lastScreenW_ = fw;
-                lastScreenH_ = fh;
-            } else {
-                fw = fh = 0;
-            }
-        }
-        screenResult_ = screen_->Evaluate(data, fw, fh);
-        if (screenResult_.triggered) {
-            std::string d;
-            if (screenResult_.foregroundChanged) d += "アプリ切替: " + screenResult_.foregroundApp;
-            if (!screenResult_.newApps.empty()) {
-                if (!d.empty()) d += " / ";
-                d += "新規起動: " + Join(screenResult_.newApps, ",");
-            }
-            if (screenResult_.screenChanged) {
-                if (!d.empty()) d += " / ";
-                char b[32];
-                std::snprintf(b, sizeof(b), "画面変化 %.1f%%", screenResult_.screenDiffRatio * 100.0f);
-                d += b;
-            }
-            if (d.empty()) d = "画面イベント";
-            PushEvent(GateSource::Screen, d, now);
-        }
-    }
-
-    // --- マイク (キーワード) ---
-    if (config_.micEnabled && now - lastMic_ >= config_.micInterval) {
-        lastMic_ = now;
-        micResult_ = mic_->Evaluate(ctx_->transcribedText);
-        if (micResult_.triggered) {
-            PushEvent(GateSource::Mic, "キーワード検知: " + Join(micResult_.matched, ", "), now);
-        }
-    }
-
-    // --- 合成ウィンドウ満了で 1 件の判断にまとめる ---
+    // 3 つのキャプチャ評価は Camera/Screen/MicGateSystem(Input) が担当し、トリガーを
+    // CapturePromptComponent として発行する。GatekeeperSystem がそれを IngestPrompt で
+    // 本クラスに取り込む（→ pending_ に蓄積）。ここでは合成ウィンドウ満了の判断のみ行う。
     if (!pending_.empty() && (now - pendingStart_ >= config_.combineWindow)) {
         FlushPending(now);
     }
@@ -186,8 +133,13 @@ static bool ContainsSummaryKeyword(const std::string& text) {
 void GatekeeperManager::Dispatch(const RouteDecision& dec, double now) {
     if (!ctx_ || llmBusy_) return;
 
-    const bool useLocal = config_.useLocalLLM && localLLM_ && localLLM_->IsModelLoaded();
+    const bool useLocal = config_.useLocalLLM && localLLM_ && localLLM_->IsModelLoaded(); // localLLM_ は直前に pull 済み
     if (!useLocal && ctx_->config.apiKey.empty()) return; // クラウドは API キー必須
+
+    knowledgeBase_ = LaviContext::Get().knowledgeBase; // KnowledgeSystem が公開した共有を参照
+    actionPipeline_ = LaviContext::Get().actionPipeline; // ActionSystem が公開した共有を参照
+    localLLM_ = LaviContext::Get().localLLM; // MemoryPanel が公開した共有を参照
+    longTermMemory_ = LaviContext::Get().longTermMemory; // MemoryPanel が公開した共有を参照
 
     std::string systemPrompt = ctx_->config.llmSystemPrompt;
 
@@ -230,6 +182,7 @@ void GatekeeperManager::Dispatch(const RouteDecision& dec, double now) {
 
     // 時事対策: 鮮度が要るクエリを検出。ローカルはアプリ側 fetch で文脈注入、
     // クラウドは Claude 内蔵 web_search を有効化する。
+    webSearch_ = LaviContext::Get().webSearch; // WebSearchSystem が公開した共有を参照（以降ラムダは this 経由で見る）
     const bool needsFresh = config_.useWebContext && webSearch_ && webSearch_->IsEnabled()
                             && webSearch_->NeedsFreshInfo(ctx_->transcribedText);
 
@@ -289,6 +242,9 @@ void GatekeeperManager::Dispatch(const RouteDecision& dec, double now) {
 void GatekeeperManager::PollLlm() {
     if (!llmBusy_) return;
 
+    actionPipeline_ = LaviContext::Get().actionPipeline; // ActionSystem が公開した共有を参照（応答完了時に実行）
+    longTermMemory_ = LaviContext::Get().longTermMemory; // MemoryPanel が公開した共有を参照（Webアクションの記憶反映に使用）
+
     // ローカル LLM の完了
     if (localFuture_.valid()) {
         if (localFuture_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
@@ -296,6 +252,11 @@ void GatekeeperManager::PollLlm() {
         llmBusy_ = false;
         lastResponse_ = content;
         if (!content.empty()) {
+            // チャット履歴(会話メモリ)へ LAVI の応答を記録（タグ類を除去した表示用テキスト）。
+            if (ctx_ && ctx_->conversationMemory) {
+                ctx_->conversationMemory->PushMessage(
+                    "assistant", StripEmotionTag(ActionPipeline::StripActionTags(StripWebActions(content))));
+            }
             auto actions = ParseWebActions(content);
             if (!actions.empty()) {
                 ExecuteWebActions(actions, longTermMemory_);
@@ -317,6 +278,11 @@ void GatekeeperManager::PollLlm() {
     llmBusy_ = false;
     lastResponse_ = resp.success ? resp.content : ("[Error] " + resp.error);
     if (resp.success) {
+        // チャット履歴(会話メモリ)へ LAVI の応答を記録（タグ類を除去した表示用テキスト）。
+        if (ctx_ && ctx_->conversationMemory) {
+            ctx_->conversationMemory->PushMessage(
+                "assistant", StripEmotionTag(ActionPipeline::StripActionTags(StripWebActions(resp.content))));
+        }
         auto actions = ParseWebActions(resp.content);
         if (!actions.empty()) {
             ExecuteWebActions(actions, longTermMemory_);
@@ -325,6 +291,20 @@ void GatekeeperManager::PollLlm() {
         if (config_.autoSpeak) {
             Speak(ActionPipeline::StripActionTags(StripWebActions(resp.content)));
         }
+    }
+}
+
+void GatekeeperManager::SpeakProactive(const std::string& content) {
+    if (!ctx_ || content.empty()) return;
+
+    // 会話メモリへ記録（表示用にタグ除去）。PollLlm の応答完了処理と同じ整形。
+    if (ctx_->conversationMemory) {
+        ctx_->conversationMemory->PushMessage(
+            "assistant", StripEmotionTag(ActionPipeline::StripActionTags(StripWebActions(content))));
+    }
+    // 発話（autoSpeak 設定に従う）。アクションは実行しない（自発観察の暴発防止）。
+    if (config_.autoSpeak) {
+        Speak(ActionPipeline::StripActionTags(StripWebActions(content)));
     }
 }
 

@@ -31,6 +31,13 @@ public:
 	void ClearAudioBuffer();        // 発話開始時に蓄積をクリア
 	void RequestTranscribe();       // 発話終了時に非同期転写を開始（モデル要ロード）
 
+	// 起動時の自動開始用（MicrophoneSystem から呼ぶ）。DEBUG パネルのボタンと同等処理を公開。
+	bool StartDefaultCapture(int deviceIndex = -1);                 // 既定/指定デバイスを開いて撮影開始
+	bool SwitchDevice(int deviceIndex);                            // 撮影中でも指定デバイスへ切替（停止→開き直し）
+	bool LoadWhisperModel(const std::string& modelPath,            // Whisper モデル + VAD パスをロード（同期）
+	                      const std::string& vadModelPath);
+	bool IsModelLoaded() const;                                    // Whisper モデルがロード済みか
+
 private:
 	SharedMediaContext* ctx_ = nullptr;
 

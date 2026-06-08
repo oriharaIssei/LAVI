@@ -10,8 +10,9 @@ class GatekeeperManager;
 // 評価自体は GatekeeperManager::Update が UI と independ に毎フレーム行う。
 class GatekeeperPanel {
 public:
-    void Initialize(SharedMediaContext* ctx, GatekeeperManager* mgr);
+    void Initialize(SharedMediaContext* ctx);
     void Finalize();
+    void SyncOnce(); // 既定パラメータの初回反映（毎フレーム無条件に呼ぶ。タブ非選択でも反映するため）
     void Draw();
 
 private:
@@ -20,7 +21,8 @@ private:
     void PushScreenParams();
 
     SharedMediaContext* ctx_ = nullptr;
-    GatekeeperManager* mgr_ = nullptr;
+    GatekeeperManager* mgr_ = nullptr; // GatekeeperSystem 公開。Draw 入口で LaviContext から pull
+    bool paramsPushed_ = false;        // 既定パラメータ反映を初回 Draw で一度だけ行う
 
     // --- Camera UI 状態 ---
     std::string ferModelPath_ = "application/resource/gatekeeper/emotion-ferplus-8.onnx";

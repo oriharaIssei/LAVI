@@ -13,6 +13,11 @@
 #include "editor/setting/SettingWindow.h"
 #include "logger/Logger.h"
 
+#include "system/LaviContext.h"
+#include "system/SharedMediaContext.h"
+#include "system/AppConfig.h" // LoadAppConfig
+#include "system/WebAction.h" // LoadTagAxes
+
 using namespace OriGine;
 
 LaviEditor::LaviEditor()  = default;
@@ -30,6 +35,11 @@ void LaviEditor::Initialize(const std::vector<std::string>& _commandLines){
 
 	RegisterUsingComponents();
 	RegisterUsingSystems();
+
+	// アプリ設定・タグ軸はシーン構築（= 各 System の Initialize）より前に決定的にロードする
+	// （System 初期化順は unordered_map 由来で非決定。MemoryPanel 等が init 時に config.apiKey を読む）。
+	LaviContext::Get().config = LoadAppConfig();
+	LoadTagAxes("application/resource/memory/tag_axes.json");
 
 	ApplyWindowSettings();
 

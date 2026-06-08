@@ -21,7 +21,7 @@ public:
     MemoryPanel();
     ~MemoryPanel();
 
-    void Initialize(SharedMediaContext* ctx, GatekeeperManager* gkManager = nullptr);
+    void Initialize(SharedMediaContext* ctx);
     void Finalize();
     void Update();
     void Draw();

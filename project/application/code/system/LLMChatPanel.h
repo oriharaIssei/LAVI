@@ -12,7 +12,6 @@
 
 struct SharedMediaContext;
 class MemoryPanel;
-class SentenceEmbedding;
 class KnowledgeBase;
 class ActionPipeline;
 class WebSearchClient;
@@ -22,11 +21,10 @@ class LLMChatPanel {
 public:
     void Initialize(SharedMediaContext* ctx);
     void SetMemoryPanel(MemoryPanel* memPanel);
-    void SetSentenceEmbedding(SentenceEmbedding* emb) { embedding_ = emb; }
-    void SetKnowledgeBase(KnowledgeBase* kb) { knowledgeBase_ = kb; } // 知識ベースRAG（共有。所有しない）
-    void SetActionPipeline(ActionPipeline* pipeline) { actionPipeline_ = pipeline; }
-    void SetWebSearch(WebSearchClient* ws) { webSearch_ = ws; } // 時事Web検索（共有。所有しない）
-    void SetLocation(LocationProvider* lp) { location_ = lp; }  // 現在地（共有。所有しない）
+    // 埋め込み/知識ベースは KnowledgeSystem、アクションは ActionSystem が LaviContext に公開。
+    // 各処理の入口で遅延参照する（Set 廃止）。
+    // 時事Web検索・現在地は WebSearchSystem / LocationSystem が LaviContext に公開。
+    // SendLLMRequest 内で LaviContext から遅延参照する（SetWebSearch / SetLocation 廃止）。
     void Finalize();
     void Draw();
 
@@ -85,9 +83,7 @@ private:
     MemoryPanel* memoryPanel_ = nullptr;
     bool useMemoryContext_ = true;
     bool useKnowledgeBase_ = true; // 知識ベースRAGを会話に注入するか
-    SentenceEmbedding* embedding_ = nullptr;
-    KnowledgeBase* knowledgeBase_ = nullptr; // 共有。所有しない
-    ActionPipeline* actionPipeline_ = nullptr;
+    KnowledgeBase* knowledgeBase_ = nullptr; // 共有。KnowledgeSystem 公開。入口で LaviContext から引く
+    ActionPipeline* actionPipeline_ = nullptr; // 共有。ActionSystem 公開。入口で LaviContext から引く
     WebSearchClient* webSearch_ = nullptr;
-    LocationProvider* location_ = nullptr;
 };

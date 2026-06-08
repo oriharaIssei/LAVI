@@ -31,3 +31,58 @@ Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
 01:13:06   dev[0]=CUDA0 type=GPU
 01:13:06   dev[1]=CPU type=CPU
 01:13:06   => GPU backend present (offload OK)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+10:21:13 LoadModel: nGpuLayers=99 devices=2
+10:21:13   dev[0]=CUDA0 type=GPU
+10:21:13   dev[1]=CPU type=CPU
+10:21:13   => GPU backend present (offload OK)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+10:26:22 LoadModel: nGpuLayers=99 devices=2
+10:26:22   dev[0]=CUDA0 type=GPU
+10:26:22   dev[1]=CPU type=CPU
+10:26:22   => GPU backend present (offload OK)
+10:29:43 forced-search: enter, query=神奈川県横浜市港南区 今日の天気は?
+10:29:43 forced-search: before BuildContext
+10:29:44 forced-search: after BuildContext, len=1178
+10:29:44 forced-search: before generate
+10:30:59 Gen: prompt=3874 cached=0 prefill=3874tok/7385ms(524tps) gen=201tok/66480ms(3tps)
+10:30:59 forced-search: after generate, len=749
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+16:32:51 LoadModel: nGpuLayers=99 devices=2
+16:32:51   dev[0]=CUDA0 type=GPU
+16:32:51   dev[1]=CPU type=CPU
+16:32:51   => GPU backend present (offload OK)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)
+Embedding: model_exists=1 vocab_exists=1 (application/resource/embedding)

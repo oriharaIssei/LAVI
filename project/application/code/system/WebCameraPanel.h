@@ -18,7 +18,8 @@ public:
 private:
     SharedMediaContext* ctx_ = nullptr;
 
-    std::unique_ptr<OriGine::WebCamera> webCamera_;
+    // WebCamera の所有・起動は WebCameraSystem。本パネルは ctx.webCamera を pull する DEBUG ビューア。
+    OriGine::WebCamera* webCamera_ = nullptr; // 非所有（Draw 入口で ctx から pull）
     std::vector<OriGine::WebCameraDeviceInfo> camDevices_;
     int selectedCamDevice_ = 0;
     PreviewTexture camPreview_;

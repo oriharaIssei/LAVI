@@ -12,8 +12,8 @@
 #include "WebAction.h"
 #include "WebSearchClient.h"
 #include "LocationProvider.h"
+#include "LaviContext.h"
 #include "LongTermMemory.h"
-#include "SentenceEmbedding.h"
 #include "system/action/ActionPipeline.h"
 
 #include "globalVariables/GlobalVariables.h"
@@ -271,6 +271,9 @@ static std::string CurrentDateTimeContext() {
 
 void LLMChatPanel::SendLLMRequest(const std::string& text, const std::vector<LLMClient::ImageFrame>& frames, bool playFiller) {
     suppressActionsForResponse_.store(false); // 既定は通常応答（アクション実行可）
+    webSearch_ = LaviContext::Get().webSearch; // WebSearchSystem が公開した共有を参照（非同期ラムダは this 経由で見る）
+    knowledgeBase_ = LaviContext::Get().knowledgeBase; // KnowledgeSystem が公開した共有を参照
+    actionPipeline_ = LaviContext::Get().actionPipeline; // ActionSystem が公開した共有を参照
     llmClient_->SetApiKey(ctx_->config.apiKey);
     // クラウドは Claude 内蔵 web_search を有効化し、いつ検索するかは Claude に委ねる（LLM主導）。
     llmClient_->SetEnableWebSearch(llmEnableWebSearch_);
@@ -290,9 +293,10 @@ void LLMChatPanel::SendLLMRequest(const std::string& text, const std::vector<LLM
     // 現在日時（毎ターン更新。固定 persona ではなく変動文脈側に載せる）。
     infoContext += "\n\n" + CurrentDateTimeContext();
 
-    // 現在地（取得済みなら注入。未取得/失敗時は空）。
-    if (location_) {
-        const std::string locCtx = location_->BuildContext();
+    // 現在地（取得済みなら注入。未取得/失敗時は空）。LocationSystem が公開した共有を参照する。
+    LocationProvider* location = LaviContext::Get().location;
+    if (location) {
+        const std::string locCtx = location->BuildContext();
         if (!locCtx.empty()) infoContext += "\n\n" + locCtx;
     }
 
@@ -414,8 +418,8 @@ void LLMChatPanel::SendLLMRequest(const std::string& text, const std::vector<LLM
             // モデルが [search:] を出さなくても確実に検索→結果を注入して1パスで回答する。
             // 現在地が取れていれば地名をクエリ先頭に付ける（「東京都新宿区 今日の天気」のように地域を反映）。
             std::string query = text;
-            if (location_) {
-                const auto loc = location_->Get();
+            if (location) {
+                const auto loc = location->Get();
                 if (loc.valid && !loc.placeName.empty()) query = loc.placeName + " " + text;
             }
             suppressActionsForResponse_.store(true); // 情報回答モード: アクションは実行しない
@@ -491,6 +495,8 @@ void LLMChatPanel::SendLLMRequest(const std::string& text, const std::vector<LLM
 }
 
 void LLMChatPanel::Draw() {
+    knowledgeBase_ = LaviContext::Get().knowledgeBase; // KnowledgeSystem が公開した共有を参照（学習ノート反映に使用）
+    actionPipeline_ = LaviContext::Get().actionPipeline; // ActionSystem が公開した共有を参照（応答のアクション実行に使用）
     ImGui::Text("LLM Chat (Claude API)");
     ImGui::Separator();
 

@@ -12,24 +12,29 @@
 #include "util/StringUtil.h"
 
 void ScreenCapturePanel::Initialize(SharedMediaContext* ctx) {
+    // ScreenCapture の所有・起動は ScreenCaptureSystem。本パネルは ctx から pull するだけ。
     ctx_ = ctx;
-
-    screenCapture_ = std::make_unique<OriGine::ScreenCapture>();
-    monitors_ = OriGine::ScreenCapture::EnumerateMonitors();
-
-    ctx_->screenCapture = screenCapture_.get();
 }
 
 void ScreenCapturePanel::Finalize() {
-    if (screenCapture_) {
-        screenCapture_->StopCapture();
-        screenCapture_->Close();
-    }
+    // キャプチャ停止・解放は ScreenCaptureSystem。パネル所有の preview テクスチャのみ解放。
     screenPreview_.Release(OriGine::Engine::GetInstance()->GetSrvHeap());
-    screenCapture_.reset();
+    screenCapture_ = nullptr;
+    ctx_ = nullptr;
 }
 
 void ScreenCapturePanel::Draw() {
+    // 所有は ScreenCaptureSystem。共有インスタンスを pull する。
+    screenCapture_ = ctx_->screenCapture;
+    if (!screenCapture_) {
+        ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "(ScreenCaptureSystem 未初期化)");
+        return;
+    }
+
+    if (monitors_.empty()) {
+        monitors_ = OriGine::ScreenCapture::EnumerateMonitors();
+    }
+
     ImGui::Text("Monitors: %d", static_cast<int>(monitors_.size()));
     ImGui::Separator();
 

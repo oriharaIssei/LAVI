@@ -8,6 +8,7 @@
 #include "AppUsageTracker.h"
 #include "GatekeeperManager.h"
 #include "SharedMediaContext.h"
+#include "LaviContext.h"
 
 #include "imgui/imgui.h"
 
@@ -20,13 +21,18 @@
 MemoryPanel::MemoryPanel() = default;
 MemoryPanel::~MemoryPanel() = default;
 
-void MemoryPanel::Initialize(SharedMediaContext* ctx, GatekeeperManager* gkManager) {
+void MemoryPanel::Initialize(SharedMediaContext* ctx) {
     ctx_ = ctx;
-    gkManager_ = gkManager;
+    // gkManager は GatekeeperSystem 所有。顔識別で使う Update 入口で LaviContext から pull する（ECS 分解）。
 
     localLLM_ = std::make_unique<LocalLLM>();
     conversationMemory_ = std::make_unique<ConversationMemory>();
     longTermMemory_ = std::make_unique<LongTermMemory>();
+
+    // 所有はここ（MemoryPanel）。GatekeeperSystem 等が LaviContext 経由で参照する（ECS 分解）。
+    LaviContext::Get().longTermMemory = longTermMemory_.get();
+    LaviContext::Get().localLLM = localLLM_.get();
+    LaviContext::Get().conversationMemory = conversationMemory_.get(); // チャット履歴表示・assistant 記録用に公開
 
     browsingCollector_ = std::make_unique<BrowsingHistoryCollector>();
     browsingCollector_->LoadCategories("application/resource/memory/tag_axes.json");
@@ -85,6 +91,11 @@ void MemoryPanel::Finalize() {
         int sid = interestGraph_->GetActiveSessionId();
         if (sid >= 0) interestGraph_->EndSession(sid);
     }
+    // LaviContext に公開した共有ポインタを解放前に無効化。
+    LaviContext::Get().conversationMemory = nullptr;
+    LaviContext::Get().longTermMemory = nullptr;
+    LaviContext::Get().localLLM = nullptr;
+
     appTracker_.reset();
     interestGraph_.reset();
     userIdentifier_.reset();
@@ -137,6 +148,7 @@ void MemoryPanel::SaveLLMConfig() {
 }
 
 void MemoryPanel::Update() {
+    gkManager_ = LaviContext::Get().gkManager; // GatekeeperSystem が公開した共有を参照（顔識別で使用）
     conversationMemory_->Update();
     appTracker_->Update(1.0f / 60.0f);
 

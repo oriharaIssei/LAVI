@@ -1,90 +1,5425 @@
 {
-    "CategoryActivity": [
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true
+ "CategoryActivity": [
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true
+ ],
+ "Entities": [
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "234e0cd3-0767-43a7-b789-f33bfffa168e",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.12999999523162842,
+       0.14000000059604645,
+       0.18000000715255737,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 10,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       520.0,
+       40.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       40.0,
+       40.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.2531645596027374,
+       0.041116006672382355
+      ]
+     }
     ],
-    "Entities": [
-        {
-            "Components": {
-                "TextComponent": [
-                    {
-                        "Handle": "907ced67-e5e3-4120-b5ef-c61b2d9092dc",
-                        "align": 0,
-                        "charSpacing": 0.0,
-                        "color": [
-                            1.0,
-                            1.0,
-                            1.0,
-                            1.0
-                        ],
-                        "fontHandle": 4294967295,
-                        "fontSize": 24.0,
-                        "lineSpacing": 1.0,
-                        "maxWidth": 0.0,
-                        "position": [
-                            0.0,
-                            0.0
-                        ],
-                        "renderPriority": 10,
-                        "showBounds": false,
-                        "text": "",
-                        "visible": true
-                    }
-                ],
-                "TextStreamComponent": [
-                    {
-                        "Handle": "3c5c4c49-d2b3-41e4-982f-1a8d6987877a",
-                        "charsPerSecond": 30.0,
-                        "loop": false,
-                        "playing": true,
-                        "startDelay": 0.0
-                    }
-                ]
-            },
-            "Handle": {
-                "uuid": "3bbb487e-a262-4ac1-b700-ffd207d56955"
-            },
-            "Name": "Entity",
-            "Systems": [
-                {
-                    "SystemCategory": 6,
-                    "SystemName": "TextRenderSystem"
-                }
-            ],
-            "isUnique": false
-        }
+    "TextComponent": [
+     {
+      "Handle": "3f506914-d2a8-4a79-b12a-c071dbc68a32",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.9200000166893005,
+       0.9399999976158142,
+       0.9800000190734863,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 20.0,
+      "lineSpacing": 1.0,
+      "maxWidth": 0.0,
+      "position": [
+       48.0,
+       46.0
+      ],
+      "renderPriority": 20,
+      "showBounds": false,
+      "text": "< General >",
+      "visible": true
+     }
     ],
-    "Systems": [
-        {
-            "CameraInitialize": {
-                "Priority": 0
-            }
-        },
-        {
-            "MediaCaptureDemoSystem": {
-                "Priority": 0
-            }
-        },
-        {
-            "TextRenderSystem": {
-                "Priority": 0
-            }
-        },
-        {
-            "TextBoundsRenderSystem": {
-                "Priority": 1
-            }
-        },
-        {
-            "TextStreamSystem": {
-                "Priority": 0
-            }
-        }
+    "UIElementComponent": [
+     {
+      "Handle": "549da703-e2d4-48c5-8a1a-7d90c2c2d3c3",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       40.0,
+       40.0
+      ],
+      "parentUuid": "",
+      "size": [
+       520.0,
+       40.0
+      ],
+      "visible": true
+     }
+    ],
+    "UITabBarComponent": [
+     {
+      "Handle": "cd914cb8-d3a5-4935-b733-9f6f393b6a01",
+      "activeIndex": 0,
+      "tabs": [
+       {
+        "label": "General",
+        "pageUuid": "b3a14685-e823-4c9c-87e3-eb59b034d0ff"
+       },
+       {
+        "label": "Tuning",
+        "pageUuid": "adf8211b-2c8f-46c7-a01b-3d205c10b266"
+       }
+      ]
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "069648b0-4301-41e4-abe0-628a11e026f0",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       40.0,
+       40.0
+      ]
+     }
     ]
+   },
+   "Handle": {
+    "uuid": "78227a5e-0ef9-4283-854c-f0d6520a7e5d"
+   },
+   "Name": "UI_TabBar",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "d158e696-6c85-492d-86a5-35c43e0cdf46",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.1599999964237213,
+       0.18000000715255737,
+       0.2199999988079071,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 0,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       520.0,
+       260.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       40.0,
+       90.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.2531645596027374,
+       0.29368576407432556
+      ]
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "01d2eba0-6626-4826-9414-f3e8e0f5f395",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": false,
+      "offsetPos": [
+       40.0,
+       90.0
+      ],
+      "parentUuid": "",
+      "size": [
+       520.0,
+       260.0
+      ],
+      "visible": true
+     }
+    ],
+    "UIPageComponent": [
+     {
+      "Handle": "ebb9cc06-f4c9-445c-8680-30f8fc343ede",
+      "index": 0,
+      "tabBarUuid": "78227a5e-0ef9-4283-854c-f0d6520a7e5d"
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "e8980540-2d9c-4115-957b-5b80b4317ba5",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       40.0,
+       90.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "b3a14685-e823-4c9c-87e3-eb59b034d0ff"
+   },
+   "Name": "UI_PageGeneral",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "36159609-dc19-426b-9449-77890c2ad7ab",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.1599999964237213,
+       0.18000000715255737,
+       0.2199999988079071,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 0,
+      "rotate": 0.0,
+      "scale": [
+       0.0,
+       0.0
+      ],
+      "size": [
+       520.0,
+       260.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       40.0,
+       90.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.2531645596027374,
+       0.29368576407432556
+      ]
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "853609c8-e1dd-4f77-8caf-c67f87125dab",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": false,
+      "offsetPos": [
+       40.0,
+       90.0
+      ],
+      "parentUuid": "",
+      "size": [
+       520.0,
+       260.0
+      ],
+      "visible": false
+     }
+    ],
+    "UIPageComponent": [
+     {
+      "Handle": "7423ec37-1fda-47c4-8471-948667e610ab",
+      "index": 1,
+      "tabBarUuid": "78227a5e-0ef9-4283-854c-f0d6520a7e5d"
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "47cdcb83-fa0d-4ee2-8e7d-36089359931b",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       40.0,
+       90.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "adf8211b-2c8f-46c7-a01b-3d205c10b266"
+   },
+   "Name": "UI_PageTuning",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "54a22b07-c2f0-4016-b514-6b93bba19201",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.20000000298023224,
+       0.2199999988079071,
+       0.2800000011920929,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 10,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       220.0,
+       40.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       56.0,
+       106.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.1265822798013687,
+       0.05873715132474899
+      ]
+     }
+    ],
+    "TextComponent": [
+     {
+      "Handle": "4cfcf629-9ad2-4c73-be23-1ebe0fb78508",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.9200000166893005,
+       0.9399999976158142,
+       0.9800000190734863,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 20.0,
+      "lineSpacing": 1.0,
+      "maxWidth": 0.0,
+      "position": [
+       64.0,
+       112.0
+      ],
+      "renderPriority": 20,
+      "showBounds": false,
+      "text": "Ping +0.1",
+      "visible": true
+     }
+    ],
+    "UIButtonComponent": [
+     {
+      "Handle": "eb4fb503-417c-403a-b4b3-0790a2d4f010",
+      "actionId": "ui.demo.ping",
+      "color": [
+       0.20000000298023224,
+       0.2199999988079071,
+       0.2800000011920929,
+       1.0
+      ],
+      "hoverColor": [
+       0.30000001192092896,
+       0.3400000035762787,
+       0.41999998688697815,
+       1.0
+      ],
+      "label": "Ping +0.1",
+      "pressColor": [
+       0.11999999731779099,
+       0.4000000059604645,
+       0.699999988079071,
+       1.0
+      ]
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "ea3a6b89-1c5e-4deb-9d7f-ff21ec6b2187",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       16.0,
+       16.0
+      ],
+      "parentUuid": "b3a14685-e823-4c9c-87e3-eb59b034d0ff",
+      "size": [
+       220.0,
+       40.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "1301151f-6ac1-4744-a068-6a96fc1b4595",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       16.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "26a1ca3a-ed5d-420c-a1fd-6e807192f5bf"
+   },
+   "Name": "UI_BtnPing",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "36bf7235-e42e-49b5-b027-a0918e3d9197",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.18000000715255737,
+       0.20000000298023224,
+       0.25999999046325684,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 10,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       320.0,
+       28.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       56.0,
+       160.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.1582278460264206,
+       0.041116006672382355
+      ]
+     },
+     {
+      "Handle": "a0c2b649-54c2-4373-8354-105fe7c50b26",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.550000011920929,
+       0.7200000286102295,
+       0.9599999785423279,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 15,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       14.0,
+       34.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       209.0,
+       157.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.1582278460264206,
+       0.041116006672382355
+      ]
+     }
+    ],
+    "TextComponent": [
+     {
+      "Handle": "36185ac7-e009-4f5a-adf4-b33c5b2b5ff8",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.9200000166893005,
+       0.9399999976158142,
+       0.9800000190734863,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 20.0,
+      "lineSpacing": 1.0,
+      "maxWidth": 0.0,
+      "position": [
+       64.0,
+       166.0
+      ],
+      "renderPriority": 20,
+      "showBounds": false,
+      "text": "Demo: 0.50",
+      "visible": true
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "eb872a9d-5ed2-4d26-ad8a-f373b734de8e",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       16.0,
+       70.0
+      ],
+      "parentUuid": "b3a14685-e823-4c9c-87e3-eb59b034d0ff",
+      "size": [
+       320.0,
+       28.0
+      ],
+      "visible": true
+     }
+    ],
+    "UISliderComponent": [
+     {
+      "Handle": "f5e87606-2be0-4113-8b55-198b3bf1d60e",
+      "bindKey": "ui.demo.value",
+      "label": "Demo",
+      "maxValue": 1.0,
+      "minValue": 0.0,
+      "value": 0.5
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "9741bf08-8814-4f13-9e6e-c2d754a72fb4",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       70.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "623d704c-e703-4fa9-80ee-fa73160e4935"
+   },
+   "Name": "UI_SliderDemo",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "e62cb67e-b9ec-4459-bd90-576d338c7a88",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.2800000011920929,
+       0.20000000298023224,
+       0.2199999988079071,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 10,
+      "rotate": 0.0,
+      "scale": [
+       0.0,
+       0.0
+      ],
+      "size": [
+       220.0,
+       40.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       56.0,
+       106.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.1265822798013687,
+       0.05873715132474899
+      ]
+     }
+    ],
+    "TextComponent": [
+     {
+      "Handle": "35d717ca-800a-4b24-bd99-39b6b9136500",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.9200000166893005,
+       0.9399999976158142,
+       0.9800000190734863,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 20.0,
+      "lineSpacing": 1.0,
+      "maxWidth": 0.0,
+      "position": [
+       64.0,
+       112.0
+      ],
+      "renderPriority": 20,
+      "showBounds": false,
+      "text": "Ping -0.1",
+      "visible": false
+     }
+    ],
+    "UIButtonComponent": [
+     {
+      "Handle": "9fbc2c76-388c-48e8-acb1-9fe9dd091382",
+      "actionId": "ui.demo.ping2",
+      "color": [
+       0.2800000011920929,
+       0.20000000298023224,
+       0.2199999988079071,
+       1.0
+      ],
+      "hoverColor": [
+       0.41999998688697815,
+       0.30000001192092896,
+       0.3400000035762787,
+       1.0
+      ],
+      "label": "Ping -0.1",
+      "pressColor": [
+       0.699999988079071,
+       0.30000001192092896,
+       0.20000000298023224,
+       1.0
+      ]
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "2f80c32d-3253-43b5-b8ee-2d6d10f9b7b1",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       16.0,
+       16.0
+      ],
+      "parentUuid": "adf8211b-2c8f-46c7-a01b-3d205c10b266",
+      "size": [
+       220.0,
+       40.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "156d9beb-6428-4fc9-b2b0-517d7068d6d3",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       16.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "e9f10c55-bf4c-4cca-bd1d-7082e035b930"
+   },
+   "Name": "UI_BtnPing2",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "22a429af-69d4-4d36-ba2d-5a8bf642d2fd",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.14000000059604645,
+       0.1599999964237213,
+       0.20000000298023224,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 10,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       600.0,
+       32.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       16.0,
+       620.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.1582278460264206,
+       0.041116006672382355
+      ]
+     }
+    ],
+    "TextComponent": [
+     {
+      "Handle": "ced1ce34-5e0b-4b50-a38f-3529392e6ca8",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.550000011920929,
+       0.5799999833106995,
+       0.6399999856948853,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 20.0,
+      "lineSpacing": 1.0,
+      "maxWidth": 0.0,
+      "position": [
+       24.0,
+       626.0
+      ],
+      "renderPriority": 20,
+      "showBounds": false,
+      "text": "メッセージを入力... (Enterで送信)",
+      "visible": true
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "8e34c7c5-3bf9-4e0c-bac9-eb72305e7510",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       16.0,
+       620.0
+      ],
+      "parentUuid": "",
+      "size": [
+       600.0,
+       32.0
+      ],
+      "visible": true
+     }
+    ],
+    "UITextInputComponent": [
+     {
+      "Handle": "84cd56f8-7d58-4186-9bf3-f565c8ca6ac2",
+      "actionId": "chat.send",
+      "maxLength": 512,
+      "placeholder": "メッセージを入力... (Enterで送信)",
+      "submitClears": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "9d8e5784-cd86-4694-bea9-964109a3525d",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       620.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "0d28fe09-abec-4356-80ee-d6a3da0602d6"
+   },
+   "Name": "UI_TextChat",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "fa2d1a44-0d7a-426a-8b95-909423363000",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.10000000149011612,
+       0.10999999940395355,
+       0.14000000059604645,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 9,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       600.0,
+       360.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       16.0,
+       250.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.1582278460264206,
+       0.041116006672382355
+      ]
+     }
+    ],
+    "TextComponent": [
+     {
+      "Handle": "8dcb515b-16ba-4069-bedb-0f2820fac49d",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.9200000166893005,
+       0.9399999976158142,
+       0.9800000190734863,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 16.0,
+      "lineSpacing": 1.149999976158142,
+      "maxWidth": 584.0,
+      "position": [
+       24.0,
+       256.0
+      ],
+      "renderPriority": 20,
+      "showBounds": false,
+      "text": "あなた: うんうんうん\nあなた: うん\nLAVI:  「あ、何か良いことがあったんですか？それとも、僕の説明に同意し\nてくれてるのかな。」\n\nえっと、その「うんうんうん」って、どんな意味なんでしょう。僕も、知りた\nいなって思うんです。何か、手伝えることはありますか？\nあなた: ああ、\nLAVI:  「あ、えっと。何かお手伝いできることがあったら、僕に言ってくれ\nればいいですよ。どんなことで来てくれたんですか？」",
+      "visible": true
+     }
+    ],
+    "UIChatLogComponent": [
+     {
+      "Handle": "f14da2e6-ae70-4195-82b2-0c2df0df8d0e",
+      "assistantPrefix": "LAVI: ",
+      "maxTurns": 200,
+      "userPrefix": "あなた: "
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "67125393-aada-419d-a684-ba04e408002a",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       16.0,
+       250.0
+      ],
+      "parentUuid": "",
+      "size": [
+       600.0,
+       360.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "83329702-bc12-44c2-93aa-46f168d05003",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       250.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "1da7b6dc-4ee8-4389-a65d-1f38b6655b5c"
+   },
+   "Name": "UI_ChatLog",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "04af45f3-650a-4edb-805a-2d6b3dbdb7f2",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.14000000059604645,
+       0.1599999964237213,
+       0.20000000298023224,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 320,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       320.0,
+       26.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       16.0,
+       40.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.1582278460264206,
+       0.041116006672382355
+      ]
+     }
+    ],
+    "TextComponent": [
+     {
+      "Handle": "3f4a6feb-c232-4f2e-b9a1-ef3e37a9538b",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.9200000166893005,
+       0.9399999976158142,
+       0.9800000190734863,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.2999999523162842,
+      "maxWidth": 0.0,
+      "position": [
+       24.0,
+       46.0
+      ],
+      "renderPriority": 330,
+      "showBounds": false,
+      "text": "マイク配列 (デジタルマイク向けインテル® スマート・サウンド・テクノロジー)  ▼",
+      "visible": true
+     }
+    ],
+    "UIComboComponent": [
+     {
+      "Handle": "9499d671-2cde-45a0-bd9b-a23d6c203b11",
+      "placeholder": "マイクを選択",
+      "role": "microphone"
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "08f565d7-19d2-460f-894b-0f0394f1cb17",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       16.0,
+       40.0
+      ],
+      "parentUuid": "e65be300-58e1-4064-b83e-6f4ae853b5d3",
+      "size": [
+       320.0,
+       26.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "3e01e4c4-3413-4a99-aef8-bc23f715bc73",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       40.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "56b1503a-6a16-4b18-a4bc-a05d606bd423"
+   },
+   "Name": "UI_MicSelect",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "ac283700-f8bf-4b54-b8b4-8a63f5654e2b",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.14000000059604645,
+       0.1599999964237213,
+       0.20000000298023224,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 320,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       320.0,
+       26.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       16.0,
+       76.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.1582278460264206,
+       0.041116006672382355
+      ]
+     }
+    ],
+    "TextComponent": [
+     {
+      "Handle": "3636a229-9e8c-4453-8378-64c59dd3c57f",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.9200000166893005,
+       0.9399999976158142,
+       0.9800000190734863,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.2999999523162842,
+      "maxWidth": 0.0,
+      "position": [
+       24.0,
+       82.0
+      ],
+      "renderPriority": 330,
+      "showBounds": false,
+      "text": "HD Webcam  ▼",
+      "visible": true
+     }
+    ],
+    "UIComboComponent": [
+     {
+      "Handle": "c59c2246-e8ee-4981-b0c9-7e0ade1612a2",
+      "placeholder": "カメラを選択",
+      "role": "webcam"
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "a37455c9-f892-4eac-ada7-aea78b238f04",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       16.0,
+       120.0
+      ],
+      "parentUuid": "e65be300-58e1-4064-b83e-6f4ae853b5d3",
+      "size": [
+       320.0,
+       26.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "06db7da0-1fb8-4346-8da2-8b4e43f72326",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       120.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "bc997e84-6c34-4481-9191-2611afb8b6cc"
+   },
+   "Name": "UI_CameraSelect",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "1850e7e9-dc15-461b-afd7-493bdd464e2a",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.18,
+       0.3,
+       0.52,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 305,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       130.0,
+       32.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       1114.0,
+       12.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.0,
+       0.0
+      ]
+     }
+    ],
+    "TextComponent": [
+     {
+      "Handle": "70fa76a1-df3f-4904-8212-d74038ab7872",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.92,
+       0.94,
+       0.98,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.2,
+      "maxWidth": 0.0,
+      "position": [
+       1124.0,
+       18.0
+      ],
+      "renderPriority": 306,
+      "showBounds": false,
+      "text": "⚙ 設定",
+      "visible": true
+     }
+    ],
+    "UIButtonComponent": [
+     {
+      "color": [
+       0.2,
+       0.22,
+       0.28,
+       1.0
+      ],
+      "hoverColor": [
+       0.3,
+       0.34,
+       0.42,
+       1.0
+      ],
+      "label": "⚙ 設定",
+      "pressColor": [
+       0.12,
+       0.4,
+       0.7,
+       1.0
+      ],
+      "Handle": "e4e7e136-d1b6-4a9c-964b-7dcebc1f7759",
+      "actionId": "settings.toggle"
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "53bb66be-483c-4e7c-99f5-be777ed45aa7",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       1114.0,
+       12.0
+      ],
+      "parentUuid": "",
+      "size": [
+       130.0,
+       32.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "97ef005b-02ec-46d8-a97e-c09438d3cdb3",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       1114.0,
+       12.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "89be4d6a-9cf4-46fc-a079-cdc97a17e023"
+   },
+   "Name": "Settings_Btn",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "2181aab7-b5b6-416f-bc23-a04dd0b7146a",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.1,
+       0.11,
+       0.14,
+       0.97
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 300,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       864.0,
+       520.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       200.0,
+       80.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.0,
+       0.0
+      ]
+     }
+    ],
+    "UITabBarComponent": [
+     {
+      "Handle": "72a1289a-d990-4ecd-9216-d25861d905c9",
+      "tabs": [
+       {
+        "label": "音声・ビデオ",
+        "pageUuid": "e65be300-58e1-4064-b83e-6f4ae853b5d3"
+       },
+       {
+        "label": "グラフィック",
+        "pageUuid": "fe5343df-e62b-41b4-a9d7-b1e2dc855ead"
+       },
+       {
+        "label": "サウンド",
+        "pageUuid": "78836ba1-1ca8-49f7-a30e-a61f115898bf"
+       },
+       {
+        "label": "LLM",
+        "pageUuid": "e1c2de0c-37c4-4e9e-9934-bae9f30fcb01"
+       }
+      ],
+      "activeIndex": 0
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "24b9965b-4299-405a-82c7-1ccce089606b",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": false,
+      "offsetPos": [
+       200.0,
+       80.0
+      ],
+      "parentUuid": "",
+      "size": [
+       864.0,
+       520.0
+      ],
+      "visible": false
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "30d33875-4b09-4480-b89f-279cc1943d46",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       200.0,
+       80.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "abe6ae2c-9c58-47f4-a3ee-35b467dec03e"
+   },
+   "Name": "Settings_Root",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    }
+   ],
+   "isUnique": true
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "814ca5b3-6682-47e4-890d-4481e9a131ad",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.16,
+       0.18,
+       0.24,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 320,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       180.0,
+       44.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       16.0,
+       16.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.0,
+       0.0
+      ]
+     }
+    ],
+    "TextComponent": [
+     {
+      "Handle": "8ba39ec4-3444-4968-b6d2-ed2b640b4100",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.92,
+       0.94,
+       0.98,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.2,
+      "maxWidth": 0.0,
+      "position": [
+       26.0,
+       28.0
+      ],
+      "renderPriority": 330,
+      "showBounds": false,
+      "text": "音声・ビデオ",
+      "visible": true
+     }
+    ],
+    "UIButtonComponent": [
+     {
+      "color": [
+       0.2,
+       0.22,
+       0.28,
+       1.0
+      ],
+      "hoverColor": [
+       0.3,
+       0.34,
+       0.42,
+       1.0
+      ],
+      "label": "音声・ビデオ",
+      "pressColor": [
+       0.12,
+       0.4,
+       0.7,
+       1.0
+      ],
+      "Handle": "ba2fcdd0-fbbf-4ca5-afa4-cfb7fa131630",
+      "actionId": "settings.page.0"
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "f32ddb55-a71f-4221-b7a2-767869640bdd",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       16.0,
+       16.0
+      ],
+      "parentUuid": "abe6ae2c-9c58-47f4-a3ee-35b467dec03e",
+      "size": [
+       180.0,
+       44.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "73369b3b-e0ce-4feb-8acc-09bbc5153efa",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       16.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "58cc07c4-12d4-4428-948f-4f5ffd3a5f06"
+   },
+   "Name": "Settings_Cat0",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "66c256f3-6501-4a43-8691-d10dce2af716",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.16,
+       0.18,
+       0.24,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 320,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       180.0,
+       44.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       16.0,
+       68.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.0,
+       0.0
+      ]
+     }
+    ],
+    "TextComponent": [
+     {
+      "Handle": "e817a5bd-ba3b-46eb-9cbe-447438b20b02",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.92,
+       0.94,
+       0.98,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.2,
+      "maxWidth": 0.0,
+      "position": [
+       26.0,
+       80.0
+      ],
+      "renderPriority": 330,
+      "showBounds": false,
+      "text": "グラフィック",
+      "visible": true
+     }
+    ],
+    "UIButtonComponent": [
+     {
+      "color": [
+       0.2,
+       0.22,
+       0.28,
+       1.0
+      ],
+      "hoverColor": [
+       0.3,
+       0.34,
+       0.42,
+       1.0
+      ],
+      "label": "グラフィック",
+      "pressColor": [
+       0.12,
+       0.4,
+       0.7,
+       1.0
+      ],
+      "Handle": "3e405925-1c0a-4695-b5b1-e94785ee851e",
+      "actionId": "settings.page.1"
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "26ec711a-47f5-46e4-9ae6-35d7d0e9e3d1",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       16.0,
+       68.0
+      ],
+      "parentUuid": "abe6ae2c-9c58-47f4-a3ee-35b467dec03e",
+      "size": [
+       180.0,
+       44.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "98b38368-efb3-4de6-840d-f06364092d08",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       68.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "d74ed3af-1c43-4c14-b4db-6b7cdc24bcad"
+   },
+   "Name": "Settings_Cat1",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "7c3b5e77-1620-4bee-a255-91973731b532",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.16,
+       0.18,
+       0.24,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 320,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       180.0,
+       44.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       16.0,
+       120.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.0,
+       0.0
+      ]
+     }
+    ],
+    "TextComponent": [
+     {
+      "Handle": "4a5d7863-d3be-4e19-a69b-4f6f944eb485",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.92,
+       0.94,
+       0.98,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.2,
+      "maxWidth": 0.0,
+      "position": [
+       26.0,
+       132.0
+      ],
+      "renderPriority": 330,
+      "showBounds": false,
+      "text": "サウンド",
+      "visible": true
+     }
+    ],
+    "UIButtonComponent": [
+     {
+      "color": [
+       0.2,
+       0.22,
+       0.28,
+       1.0
+      ],
+      "hoverColor": [
+       0.3,
+       0.34,
+       0.42,
+       1.0
+      ],
+      "label": "サウンド",
+      "pressColor": [
+       0.12,
+       0.4,
+       0.7,
+       1.0
+      ],
+      "Handle": "ba8d78cc-f9ed-4d5e-b270-84e364999a1f",
+      "actionId": "settings.page.2"
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "62db42f4-2d77-4f24-926c-b5c3e5243e20",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       16.0,
+       120.0
+      ],
+      "parentUuid": "abe6ae2c-9c58-47f4-a3ee-35b467dec03e",
+      "size": [
+       180.0,
+       44.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "ce0602b7-21ed-4c3c-a632-22a5f05d7c43",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       120.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "8f1ac8a6-03f0-466d-8a3d-65b4e5f3b7a8"
+   },
+   "Name": "Settings_Cat2",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "d3374c34-f2ad-469b-8108-9320fdf4bd5e",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.16,
+       0.18,
+       0.24,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 320,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       180.0,
+       44.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       16.0,
+       172.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.0,
+       0.0
+      ]
+     }
+    ],
+    "TextComponent": [
+     {
+      "Handle": "22bfdb2a-488e-43c0-b840-a5d5af01d2a2",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.92,
+       0.94,
+       0.98,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.2,
+      "maxWidth": 0.0,
+      "position": [
+       26.0,
+       184.0
+      ],
+      "renderPriority": 330,
+      "showBounds": false,
+      "text": "LLM",
+      "visible": true
+     }
+    ],
+    "UIButtonComponent": [
+     {
+      "color": [
+       0.2,
+       0.22,
+       0.28,
+       1.0
+      ],
+      "hoverColor": [
+       0.3,
+       0.34,
+       0.42,
+       1.0
+      ],
+      "label": "LLM",
+      "pressColor": [
+       0.12,
+       0.4,
+       0.7,
+       1.0
+      ],
+      "Handle": "3950fecc-5cda-4660-8191-d88ee2bc9c49",
+      "actionId": "settings.page.3"
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "62765934-9b72-4c29-bcee-b35ab81903e8",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       16.0,
+       172.0
+      ],
+      "parentUuid": "abe6ae2c-9c58-47f4-a3ee-35b467dec03e",
+      "size": [
+       180.0,
+       44.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "7daaf5bc-13fe-4dba-8a28-a1a4e7a5d31a",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       172.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "8736c97c-2d83-4b9f-9d36-dd8d60c2e163"
+   },
+   "Name": "Settings_Cat3",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "f742b277-5971-422d-bbac-98f83c83e686",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.13,
+       0.14,
+       0.18,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 310,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       636.0,
+       488.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       212.0,
+       16.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.0,
+       0.0
+      ]
+     }
+    ],
+    "UIPageComponent": [
+     {
+      "Handle": "4a135213-c86b-4498-8bce-8d9fbce34afb",
+      "tabBarUuid": "abe6ae2c-9c58-47f4-a3ee-35b467dec03e",
+      "index": 0
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "d9a3b9ce-dd2e-438b-898f-fe5b121e8248",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": false,
+      "offsetPos": [
+       212.0,
+       16.0
+      ],
+      "parentUuid": "abe6ae2c-9c58-47f4-a3ee-35b467dec03e",
+      "size": [
+       636.0,
+       488.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "6672b51f-8941-4dd6-a65c-1e3fdb8b11a5",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       212.0,
+       16.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "e65be300-58e1-4064-b83e-6f4ae853b5d3"
+   },
+   "Name": "Settings_Page0",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "2166134c-15f6-49a4-b2a6-41578478d84d",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.13,
+       0.14,
+       0.18,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 310,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       636.0,
+       488.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       212.0,
+       16.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.0,
+       0.0
+      ]
+     }
+    ],
+    "UIPageComponent": [
+     {
+      "Handle": "c6775130-6323-444b-be1a-9a6b4c0ffbc6",
+      "tabBarUuid": "abe6ae2c-9c58-47f4-a3ee-35b467dec03e",
+      "index": 1
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "c4d5927b-8513-4b50-83f3-f576b99d08f8",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": false,
+      "offsetPos": [
+       212.0,
+       16.0
+      ],
+      "parentUuid": "abe6ae2c-9c58-47f4-a3ee-35b467dec03e",
+      "size": [
+       636.0,
+       488.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "fe52383b-25b3-47a4-a804-cc8e70ac6d74",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       212.0,
+       16.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "fe5343df-e62b-41b4-a9d7-b1e2dc855ead"
+   },
+   "Name": "Settings_Page1",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "c9ff890d-30e7-4740-b449-f3665ff15a0a",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.13,
+       0.14,
+       0.18,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 310,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       636.0,
+       488.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       212.0,
+       16.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.0,
+       0.0
+      ]
+     }
+    ],
+    "UIPageComponent": [
+     {
+      "Handle": "8a913cbc-016d-49ca-b03f-8d5d79869a9b",
+      "tabBarUuid": "abe6ae2c-9c58-47f4-a3ee-35b467dec03e",
+      "index": 2
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "80017791-31b5-41d4-a1ec-287b7dae822d",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": false,
+      "offsetPos": [
+       212.0,
+       16.0
+      ],
+      "parentUuid": "abe6ae2c-9c58-47f4-a3ee-35b467dec03e",
+      "size": [
+       636.0,
+       488.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "3a22910e-7f22-4aa6-8542-c5e5f1fdc153",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       212.0,
+       16.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "78836ba1-1ca8-49f7-a30e-a61f115898bf"
+   },
+   "Name": "Settings_Page2",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "cfdfcfe6-6ea4-4d96-a463-140e11cc1abf",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.13,
+       0.14,
+       0.18,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 310,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       636.0,
+       488.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       212.0,
+       16.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.0,
+       0.0
+      ]
+     }
+    ],
+    "UIPageComponent": [
+     {
+      "Handle": "bdbc52ca-af3d-4acf-9507-a4eb2fe4daf7",
+      "tabBarUuid": "abe6ae2c-9c58-47f4-a3ee-35b467dec03e",
+      "index": 3
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "57baec85-c149-4e8c-84b8-8be91dcc5e06",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": false,
+      "offsetPos": [
+       212.0,
+       16.0
+      ],
+      "parentUuid": "abe6ae2c-9c58-47f4-a3ee-35b467dec03e",
+      "size": [
+       636.0,
+       488.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "41af8e21-ef8f-4960-8e9e-2ef69549779a",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       212.0,
+       16.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "e1c2de0c-37c4-4e9e-9934-bae9f30fcb01"
+   },
+   "Name": "Settings_Page3",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "TextComponent": [
+     {
+      "Handle": "29e5395d-7e09-4030-b042-bc17a503098e",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.92,
+       0.94,
+       0.98,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.2,
+      "maxWidth": 0.0,
+      "position": [
+       24.0,
+       18.0
+      ],
+      "renderPriority": 330,
+      "showBounds": false,
+      "text": "マイク",
+      "visible": true
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "717ab477-5353-447b-befa-254ff79918d4",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": false,
+      "offsetPos": [
+       16.0,
+       12.0
+      ],
+      "parentUuid": "e65be300-58e1-4064-b83e-6f4ae853b5d3",
+      "size": [
+       300.0,
+       22.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "226f32df-d4e3-49f5-be7e-55d46fabb548",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       12.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "5ac7923f-0a5f-4916-9c35-188e3c5ce5b7"
+   },
+   "Name": "Settings_LblMic",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "TextComponent": [
+     {
+      "Handle": "c1cafe0d-6a4e-4a5a-9a3a-b4bc263dd980",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.92,
+       0.94,
+       0.98,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.2,
+      "maxWidth": 0.0,
+      "position": [
+       24.0,
+       98.0
+      ],
+      "renderPriority": 330,
+      "showBounds": false,
+      "text": "カメラ",
+      "visible": true
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "38afa934-f311-428d-9c10-79271ef020e4",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": false,
+      "offsetPos": [
+       16.0,
+       92.0
+      ],
+      "parentUuid": "e65be300-58e1-4064-b83e-6f4ae853b5d3",
+      "size": [
+       300.0,
+       22.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "c50f11d4-cf53-47c6-b943-17b245b86190",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       92.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "badbc821-75e9-40b5-bc66-d95495c8588b"
+   },
+   "Name": "Settings_LblCam",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "TextComponent": [
+     {
+      "Handle": "2c1fd31c-3625-42f8-ac7f-6facfc548796",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.92,
+       0.94,
+       0.98,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.2,
+      "maxWidth": 0.0,
+      "position": [
+       24.0,
+       178.0
+      ],
+      "renderPriority": 330,
+      "showBounds": false,
+      "text": "画面共有",
+      "visible": true
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "843597cc-cf2f-4cfa-b0d5-120ce144d120",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": false,
+      "offsetPos": [
+       16.0,
+       172.0
+      ],
+      "parentUuid": "e65be300-58e1-4064-b83e-6f4ae853b5d3",
+      "size": [
+       300.0,
+       22.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "a9b4b997-6a2e-4a76-9c55-f167510243a9",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       172.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "bd2b9be7-6831-4bbe-8f40-125adf8321dc"
+   },
+   "Name": "Settings_LblScr",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "2a51500e-a7bc-4e23-936e-196856860b33",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.14,
+       0.16,
+       0.2,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 320,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       600.0,
+       26.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       16.0,
+       200.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.0,
+       0.0
+      ]
+     }
+    ],
+    "TextComponent": [
+     {
+      "Handle": "57317e22-7698-4451-85a0-95a892709b93",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.92,
+       0.94,
+       0.98,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.2,
+      "maxWidth": 0.0,
+      "position": [
+       24.0,
+       206.0
+      ],
+      "renderPriority": 330,
+      "showBounds": false,
+      "text": "画面を選択  ▼",
+      "visible": true
+     }
+    ],
+    "UIComboComponent": [
+     {
+      "Handle": "1dabb2b7-dcd6-41cd-9398-7317efee12ec",
+      "placeholder": "画面を選択",
+      "role": "screen"
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "eeae3013-bccb-4b9e-bac5-6e0da2425e94",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       16.0,
+       200.0
+      ],
+      "parentUuid": "e65be300-58e1-4064-b83e-6f4ae853b5d3",
+      "size": [
+       600.0,
+       26.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "941493e0-613f-46d2-bbd0-adb43e064791",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       200.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "f56fdacc-921c-43fa-98cf-be971be35b85"
+   },
+   "Name": "UI_ScreenSelect",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "TextComponent": [
+     {
+      "Handle": "edd18453-4140-4d34-b6f6-6b6f0fb1d57e",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.92,
+       0.94,
+       0.98,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.2,
+      "maxWidth": 0.0,
+      "position": [
+       24.0,
+       22.0
+      ],
+      "renderPriority": 330,
+      "showBounds": false,
+      "text": "グラフィック設定（準備中）",
+      "visible": true
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "a55b8528-19a0-40bd-b8a3-12dd19344b98",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": false,
+      "offsetPos": [
+       16.0,
+       16.0
+      ],
+      "parentUuid": "fe5343df-e62b-41b4-a9d7-b1e2dc855ead",
+      "size": [
+       300.0,
+       22.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "2574e9b2-c652-453b-84f7-eb9beface3fd",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       16.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "4b36b236-04e6-42dd-99e1-57ca6b22255f"
+   },
+   "Name": "Settings_Page1_Lbl",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "TextComponent": [
+     {
+      "Handle": "28086afa-19b2-4c46-b039-4ca3ad1ea060",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.92,
+       0.94,
+       0.98,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.2,
+      "maxWidth": 0.0,
+      "position": [
+       24.0,
+       22.0
+      ],
+      "renderPriority": 330,
+      "showBounds": false,
+      "text": "サウンド 設定",
+      "visible": true
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "595a2752-8b4d-440d-82f4-f282031fcf91",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": false,
+      "offsetPos": [
+       16.0,
+       16.0
+      ],
+      "parentUuid": "78836ba1-1ca8-49f7-a30e-a61f115898bf",
+      "size": [
+       300.0,
+       22.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "dc3c030c-e0c6-43a2-b34d-4f3e56fbdeb7",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       16.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "4dec13b0-9add-46e6-9e1e-2e67831eebbf"
+   },
+   "Name": "Settings_Page2_Lbl",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "TextComponent": [
+     {
+      "Handle": "9caa2bab-7346-4edc-af97-3ce151b757fb",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.92,
+       0.94,
+       0.98,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.2,
+      "maxWidth": 0.0,
+      "position": [
+       24.0,
+       22.0
+      ],
+      "renderPriority": 330,
+      "showBounds": false,
+      "text": "LLM 設定",
+      "visible": true
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "d35350b5-2827-4ac6-a1fe-716801ef668e",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": false,
+      "offsetPos": [
+       16.0,
+       16.0
+      ],
+      "parentUuid": "e1c2de0c-37c4-4e9e-9934-bae9f30fcb01",
+      "size": [
+       300.0,
+       22.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "b41fdece-a684-4682-83a6-4abf86e7713a",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       16.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "02362f16-3dd7-48b4-ad7d-110be45544bb"
+   },
+   "Name": "Settings_Page3_Lbl",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "ff6c4cd6-1591-41a0-9454-b3a967b71a24",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.14,
+       0.16,
+       0.2,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 320,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       230.0,
+       26.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       360.0,
+       40.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.0,
+       0.0
+      ]
+     }
+    ],
+    "TextComponent": [
+     {
+      "Handle": "f42ab152-0e32-490d-bfc4-ed5d40d17f21",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.92,
+       0.94,
+       0.98,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.3,
+      "maxWidth": 0.0,
+      "position": [
+       360.0,
+       40.0
+      ],
+      "renderPriority": 330,
+      "showBounds": false,
+      "text": "[ ] マイクを使用する",
+      "visible": true
+     }
+    ],
+    "UICheckboxComponent": [
+     {
+      "Handle": "9cb1d76c-f097-441a-bbd5-a4be9d2f448e",
+      "label": "マイクを使用する",
+      "role": "mic.enabled"
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "615ed030-b8ba-4e20-b4db-b5bb369f0b05",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       360.0,
+       40.0
+      ],
+      "parentUuid": "e65be300-58e1-4064-b83e-6f4ae853b5d3",
+      "size": [
+       230.0,
+       26.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "98bfdbef-a18a-45da-bcf5-e66d819aea31",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       360.0,
+       40.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "d7bec2cd-b36b-461f-8760-8f92abd7ae0e"
+   },
+   "Name": "Settings_ChkMic",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "04f57928-52df-40e5-8075-5528ca360380",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.14,
+       0.16,
+       0.2,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 320,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       230.0,
+       26.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       360.0,
+       120.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.0,
+       0.0
+      ]
+     }
+    ],
+    "TextComponent": [
+     {
+      "Handle": "bf91a260-f8c4-403d-8730-5d3e50a29f71",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.92,
+       0.94,
+       0.98,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.3,
+      "maxWidth": 0.0,
+      "position": [
+       360.0,
+       120.0
+      ],
+      "renderPriority": 330,
+      "showBounds": false,
+      "text": "[ ] Webカメラを使用する",
+      "visible": true
+     }
+    ],
+    "UICheckboxComponent": [
+     {
+      "Handle": "5968e168-1c88-498d-b31d-0b3951a80d6d",
+      "label": "Webカメラを使用する",
+      "role": "camera.enabled"
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "cfa47ba6-82d6-46f8-a0fe-15c8a5068df1",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       360.0,
+       120.0
+      ],
+      "parentUuid": "e65be300-58e1-4064-b83e-6f4ae853b5d3",
+      "size": [
+       230.0,
+       26.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "8c91d956-e2a3-4f90-a7aa-8eedda1709c1",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       360.0,
+       120.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "f5edc6ed-2893-4cec-94eb-3a2525a50d47"
+   },
+   "Name": "Settings_ChkCam",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "5d88e770-ecee-4e81-80d1-5bb0f02d3c1c",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.14,
+       0.16,
+       0.2,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 320,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       230.0,
+       26.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       360.0,
+       172.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.0,
+       0.0
+      ]
+     }
+    ],
+    "TextComponent": [
+     {
+      "Handle": "9b41baeb-3c0f-46de-87c5-1387d290d2f4",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.92,
+       0.94,
+       0.98,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.3,
+      "maxWidth": 0.0,
+      "position": [
+       360.0,
+       172.0
+      ],
+      "renderPriority": 330,
+      "showBounds": false,
+      "text": "[ ] 画面共有を使用する",
+      "visible": true
+     }
+    ],
+    "UICheckboxComponent": [
+     {
+      "Handle": "5f4677ec-4c82-4eec-9019-2cc6e1bf7775",
+      "label": "画面共有を使用する",
+      "role": "screen.enabled"
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "3f76a2a9-233c-4bdd-8a41-0016420a2287",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       360.0,
+       172.0
+      ],
+      "parentUuid": "e65be300-58e1-4064-b83e-6f4ae853b5d3",
+      "size": [
+       230.0,
+       26.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "7ad6aecb-4ba7-4031-b7de-afc17e3e9084",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       360.0,
+       172.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "6937b3bf-e7ee-4577-b957-6dc740cf5295"
+   },
+   "Name": "Settings_ChkScr",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "653daf0e-0413-4a26-8237-35726abbbd21",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.14,
+       0.16,
+       0.2,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 320,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       420.0,
+       26.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       16.0,
+       260.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.0,
+       0.0
+      ]
+     }
+    ],
+    "TextComponent": [
+     {
+      "Handle": "bfbb1d93-3ef2-47c2-bc7b-b83e35c3ac18",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.92,
+       0.94,
+       0.98,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.3,
+      "maxWidth": 0.0,
+      "position": [
+       16.0,
+       260.0
+      ],
+      "renderPriority": 330,
+      "showBounds": false,
+      "text": "[ ] 閉じるボタンでトレイに最小化する",
+      "visible": true
+     }
+    ],
+    "UICheckboxComponent": [
+     {
+      "Handle": "244c6427-99b2-4c33-b150-01f5cedb6e19",
+      "label": "閉じるボタンでトレイに最小化する",
+      "role": "tray.minimizeOnClose"
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "4bc91e84-bfd3-4b36-8e2b-62162396311d",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       16.0,
+       260.0
+      ],
+      "parentUuid": "e65be300-58e1-4064-b83e-6f4ae853b5d3",
+      "size": [
+       420.0,
+       26.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "142d2f2c-9966-4955-b2e2-c6f0bd3bab81",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       260.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "17d13aad-3d47-4d4b-bf29-311ce68c5a89"
+   },
+   "Name": "Settings_ChkTray",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "TextComponent": [
+     {
+      "Handle": "2fdce24f-62c2-4b0b-8abf-a8bc2cf615d1",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.92,
+       0.94,
+       0.98,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.0,
+      "maxWidth": 0.0,
+      "position": [
+       16.0,
+       56.0
+      ],
+      "renderPriority": 331,
+      "showBounds": false,
+      "text": "API キー (Anthropic)",
+      "visible": true
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "3986f47d-768d-4f8a-83a8-646741a439f0",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": false,
+      "offsetPos": [
+       16.0,
+       56.0
+      ],
+      "parentUuid": "e1c2de0c-37c4-4e9e-9934-bae9f30fcb01",
+      "size": [
+       300.0,
+       22.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "345d0749-183e-425b-8579-5325e1fb49da",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       56.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "b2b63fc4-a4b0-436c-a0d7-dc9369c3ddb1"
+   },
+   "Name": "Settings_LblApiKey",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "c5b84d70-52a3-472c-92a3-2498522e200e",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.14,
+       0.16,
+       0.2,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 320,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       600.0,
+       32.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       16.0,
+       84.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.0,
+       0.0
+      ]
+     }
+    ],
+    "TextComponent": [
+     {
+      "Handle": "bbe54124-ddaa-48fe-9265-104469843b76",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.55,
+       0.58,
+       0.64,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 20.0,
+      "lineSpacing": 1.0,
+      "maxWidth": 0.0,
+      "position": [
+       16.0,
+       84.0
+      ],
+      "renderPriority": 330,
+      "showBounds": false,
+      "text": "API キーを入力して Enter",
+      "visible": true
+     }
+    ],
+    "UITextInputComponent": [
+     {
+      "Handle": "385eae5f-b610-44bc-8293-cb4a49683b80",
+      "actionId": "llm.apikey.set",
+      "maxLength": 256,
+      "placeholder": "API キーを入力して Enter",
+      "submitClears": true,
+      "password": true
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "17aea3cf-4684-42c0-9af4-d252447478a9",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       16.0,
+       84.0
+      ],
+      "parentUuid": "e1c2de0c-37c4-4e9e-9934-bae9f30fcb01",
+      "size": [
+       600.0,
+       32.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "99df28e9-0ca1-4070-aaac-9e85a929e109",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       84.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "c4fc8446-0d81-4987-8432-2ed8f95fbe81"
+   },
+   "Name": "Settings_ApiKeyInput",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "a883e57e-3994-47ea-b851-ae903b622577",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.14,
+       0.16,
+       0.2,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 320,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       460.0,
+       26.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       16.0,
+       140.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.0,
+       0.0
+      ]
+     }
+    ],
+    "TextComponent": [
+     {
+      "Handle": "8f8afc20-b8a7-42f4-83f1-5e45282e777b",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.92,
+       0.94,
+       0.98,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.3,
+      "maxWidth": 0.0,
+      "position": [
+       16.0,
+       140.0
+      ],
+      "renderPriority": 330,
+      "showBounds": false,
+      "text": "[ ] ローカルLLMを使用する（OFF=クラウド Claude）",
+      "visible": true
+     }
+    ],
+    "UICheckboxComponent": [
+     {
+      "Handle": "1bc455fb-3a58-4708-b536-4b3f82502241",
+      "label": "ローカルLLMを使用する（OFF=クラウド Claude）",
+      "role": "llm.useLocal"
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "68644f92-1215-4a0b-9c78-5f589c51baad",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       16.0,
+       140.0
+      ],
+      "parentUuid": "e1c2de0c-37c4-4e9e-9934-bae9f30fcb01",
+      "size": [
+       460.0,
+       26.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "8ecf432d-486b-46d0-af33-ee0150e6c3b3",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       140.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "4f791982-1d54-4587-aafb-804f5842fe0f"
+   },
+   "Name": "Settings_ChkLocalLLM",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "ae8978f0-bf9b-434c-b74b-1a08d4118fe2",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.14,
+       0.16,
+       0.2,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 320,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       460.0,
+       26.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       16.0,
+       180.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.0,
+       0.0
+      ]
+     }
+    ],
+    "TextComponent": [
+     {
+      "Handle": "b8656512-d083-44f3-a762-abc48c375374",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.92,
+       0.94,
+       0.98,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.3,
+      "maxWidth": 0.0,
+      "position": [
+       16.0,
+       180.0
+      ],
+      "renderPriority": 330,
+      "showBounds": false,
+      "text": "[ ] Web Context（時事対策）を使用する",
+      "visible": true
+     }
+    ],
+    "UICheckboxComponent": [
+     {
+      "Handle": "76d19ddb-d61e-4a10-b2d1-1167e681383c",
+      "label": "Web Context（時事対策）を使用する",
+      "role": "llm.useWebContext"
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "a4274542-7c7a-4ff0-85e3-03fd90398e1c",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       16.0,
+       180.0
+      ],
+      "parentUuid": "e1c2de0c-37c4-4e9e-9934-bae9f30fcb01",
+      "size": [
+       460.0,
+       26.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "19ef45b5-63a3-41d1-ac99-ae241f3399bf",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       180.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "7f1c33c2-47db-4137-b133-965887859379"
+   },
+   "Name": "Settings_ChkWebCtx",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "TextComponent": [
+     {
+      "Handle": "51970f50-bd82-4bf8-92f8-a6098e1e82de",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.92,
+       0.94,
+       0.98,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.0,
+      "maxWidth": 0.0,
+      "position": [
+       16.0,
+       56.0
+      ],
+      "renderPriority": 331,
+      "showBounds": false,
+      "text": "VoiceVox 話者",
+      "visible": true
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "f8c47ee9-a122-4078-bf17-22111a485559",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": false,
+      "offsetPos": [
+       16.0,
+       56.0
+      ],
+      "parentUuid": "78836ba1-1ca8-49f7-a30e-a61f115898bf",
+      "size": [
+       300.0,
+       22.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "8efb4e52-c558-4857-96b2-fa823eff2e6a",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       56.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "aaae0542-e039-4381-b10a-33c4214c27c8"
+   },
+   "Name": "Settings_LblSpeaker",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "187953ba-63cf-4626-9499-c339faadbab8",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.14,
+       0.16,
+       0.2,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 320,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       460.0,
+       26.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       16.0,
+       84.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.0,
+       0.0
+      ]
+     }
+    ],
+    "TextComponent": [
+     {
+      "Handle": "c8d653af-cb84-4f0b-9a0b-e0bc8b1d317d",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.92,
+       0.94,
+       0.98,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.3,
+      "maxWidth": 0.0,
+      "position": [
+       16.0,
+       84.0
+      ],
+      "renderPriority": 330,
+      "showBounds": false,
+      "text": "話者を選択",
+      "visible": true
+     }
+    ],
+    "UIComboComponent": [
+     {
+      "Handle": "32ffec53-5d27-480b-bd0b-919a37ee1aab",
+      "role": "voicevox.speaker",
+      "placeholder": "話者を選択"
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "722da3d7-4bd9-4ebb-a33d-f1f699437b70",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       16.0,
+       84.0
+      ],
+      "parentUuid": "78836ba1-1ca8-49f7-a30e-a61f115898bf",
+      "size": [
+       460.0,
+       26.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "d611d3ae-3e40-4e32-aacd-84f746d12249",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       84.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "d8b68d56-16da-4e29-8f52-bbf6b00b8934"
+   },
+   "Name": "Settings_SpeakerSelect",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "TextComponent": [
+     {
+      "Handle": "39ec2b6e-4608-409a-926c-b47bfdfc77da",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.92,
+       0.94,
+       0.98,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.0,
+      "maxWidth": 0.0,
+      "position": [
+       16.0,
+       228.0
+      ],
+      "renderPriority": 331,
+      "showBounds": false,
+      "text": "ペルソナ生成（説明文 → 人格プロンプト）",
+      "visible": true
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "e6b643da-d1b2-4457-bb15-a1a9c4eaf46e",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": false,
+      "offsetPos": [
+       16.0,
+       228.0
+      ],
+      "parentUuid": "e1c2de0c-37c4-4e9e-9934-bae9f30fcb01",
+      "size": [
+       420.0,
+       22.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "d59c76cd-8b65-461f-b519-07a4feb80af4",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       228.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "a89bddd8-180f-4874-a03d-c436b847fb1a"
+   },
+   "Name": "Settings_LblPersona",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "921d5d6a-3386-4974-a43b-c67b79423f1c",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.14,
+       0.16,
+       0.2,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 320,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       600.0,
+       32.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       16.0,
+       256.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.0,
+       0.0
+      ]
+     }
+    ],
+    "TextComponent": [
+     {
+      "Handle": "447053d1-1c52-47a3-b2c1-da2ee196eda9",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.55,
+       0.58,
+       0.64,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 20.0,
+      "lineSpacing": 1.0,
+      "maxWidth": 0.0,
+      "position": [
+       16.0,
+       256.0
+      ],
+      "renderPriority": 330,
+      "showBounds": false,
+      "text": "ペルソナの説明を入力して Enter（例: 元気な妹）",
+      "visible": true
+     }
+    ],
+    "UITextInputComponent": [
+     {
+      "Handle": "3f571251-d363-4ca9-9da2-eff9ef35268a",
+      "actionId": "llm.persona.generate",
+      "maxLength": 256,
+      "placeholder": "ペルソナの説明を入力して Enter（例: 元気な妹）",
+      "submitClears": true,
+      "password": false
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "3f1ab594-c35b-4809-82fc-d79ff9517b54",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       16.0,
+       256.0
+      ],
+      "parentUuid": "e1c2de0c-37c4-4e9e-9934-bae9f30fcb01",
+      "size": [
+       600.0,
+       32.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "9a4ff232-ec15-48d4-960e-1832639c843f",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       256.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "96c305f1-407b-4c5f-a15e-6f92b089cab3"
+   },
+   "Name": "Settings_PersonaInput",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  },
+  {
+   "Components": {
+    "SpriteRenderer": [
+     {
+      "Handle": "dd3791f3-e1c7-452f-8e54-1b465664947d",
+      "anchorPoint": [
+       0.0,
+       0.0
+      ],
+      "color": [
+       0.14,
+       0.16,
+       0.2,
+       1.0
+      ],
+      "defaultWindowSize": [
+       1264.0,
+       681.0
+      ],
+      "isFlipX": false,
+      "isFlipY": false,
+      "isRender": true,
+      "renderingPriority": 320,
+      "rotate": 0.0,
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "size": [
+       520.0,
+       26.0
+      ],
+      "textureLeftTop": [
+       0.0,
+       0.0
+      ],
+      "texturePath": "",
+      "textureSize": [
+       1.0,
+       1.0
+      ],
+      "translate": [
+       16.0,
+       312.0
+      ],
+      "uvRotate": 0.0,
+      "uvScale": [
+       1.0,
+       1.0
+      ],
+      "uvTranslate": [
+       0.0,
+       0.0
+      ],
+      "windowRatioPos": [
+       0.0,
+       0.0
+      ],
+      "windowRatioSize": [
+       0.0,
+       0.0
+      ]
+     }
+    ],
+    "TextComponent": [
+     {
+      "Handle": "5eacdf89-f2dd-4972-863b-f48ac923d2d2",
+      "align": 0,
+      "charSpacing": 0.0,
+      "color": [
+       0.92,
+       0.94,
+       0.98,
+       1.0
+      ],
+      "fontHandle": 4294967295,
+      "fontSize": 18.0,
+      "lineSpacing": 1.3,
+      "maxWidth": 0.0,
+      "position": [
+       16.0,
+       312.0
+      ],
+      "renderPriority": 330,
+      "showBounds": false,
+      "text": "[ ] 自律観察（一定間隔でカメラ/画面にコメント）",
+      "visible": true
+     }
+    ],
+    "UICheckboxComponent": [
+     {
+      "Handle": "18db01a9-a5df-498a-8e6a-665a7d76c7c5",
+      "label": "自律観察（一定間隔でカメラ/画面にコメント）",
+      "role": "llm.autoObserve"
+     }
+    ],
+    "UIElementComponent": [
+     {
+      "Handle": "f43d0634-d8e5-477c-9c5a-54ebba14f46b",
+      "anchor": [
+       0.0,
+       0.0
+      ],
+      "interactive": true,
+      "offsetPos": [
+       16.0,
+       312.0
+      ],
+      "parentUuid": "e1c2de0c-37c4-4e9e-9934-bae9f30fcb01",
+      "size": [
+       520.0,
+       26.0
+      ],
+      "visible": true
+     }
+    ],
+    "Transform2d": [
+     {
+      "Handle": "2fa12b40-b516-4c0e-a56b-b5a453959486",
+      "scale": [
+       1.0,
+       1.0
+      ],
+      "rotate": 0.0,
+      "translate": [
+       16.0,
+       312.0
+      ]
+     }
+    ]
+   },
+   "Handle": {
+    "uuid": "cd1cbdad-ee0c-4590-9e7c-c99df89e4709"
+   },
+   "Name": "Settings_ChkAutoObs",
+   "Systems": [
+    {
+     "SystemCategory": 6,
+     "SystemName": "SpriteRenderSystem"
+    },
+    {
+     "SystemCategory": 6,
+     "SystemName": "TextRenderSystem"
+    }
+   ],
+   "isUnique": false
+  }
+ ],
+ "Systems": [
+  {
+   "UILayoutSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "MicrophoneSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "UIInputSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "UIPresentationSystem": {
+    "Priority": -100
+   }
+  },
+  {
+   "KnowledgeSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "CameraInitialize": {
+    "Priority": 0
+   }
+  },
+  {
+   "ScreenCaptureSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "WebSearchSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "TextChatSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "MediaCaptureDemoSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "LocationSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "ActionSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "WakeWordSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "TurnSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "CameraGateSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "CameraSelectSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "ScreenGateSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "MicGateSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "GatekeeperSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "SpriteRenderSystem": {
+    "Priority": -10
+   }
+  },
+  {
+   "TextRenderSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "TextBoundsRenderSystem": {
+    "Priority": 1
+   }
+  },
+  {
+   "TextStreamSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "AppLifecycleSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "MemorySystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "VoiceVoxSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "WebCameraSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "MicSelectSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "SettingsUISystem": {
+    "Priority": -50
+   }
+  },
+  {
+   "MediaToggleSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "VisionSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "LLMSettingsSystem": {
+    "Priority": 0
+   }
+  },
+  {
+   "VoiceSettingsSystem": {
+    "Priority": 0
+   }
+  }
+ ]
 }

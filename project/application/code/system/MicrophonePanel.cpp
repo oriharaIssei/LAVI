@@ -90,6 +90,46 @@ void MicrophonePanel::Initialize(SharedMediaContext* ctx) {
     LoadVocabulary();
 }
 
+bool MicrophonePanel::StartDefaultCapture(int deviceIndex) {
+    if (!microphone_) return false;
+    if (microphone_->IsCapturing()) return true;
+    std::wstring deviceId;
+    if (deviceIndex >= 0 && deviceIndex < static_cast<int>(micDevices_.size())) {
+        deviceId = micDevices_[deviceIndex].id;
+        selectedMicDevice_ = deviceIndex;
+    } // それ以外は空＝既定デバイス
+    if (microphone_->Open(deviceId)) {
+        microphone_->StartCapture();
+        return true;
+    }
+    return false;
+}
+
+bool MicrophonePanel::SwitchDevice(int deviceIndex) {
+    if (!microphone_) return false;
+    if (microphone_->IsCapturing()) {
+        microphone_->StopCapture();
+        microphone_->Close();
+    }
+    return StartDefaultCapture(deviceIndex);
+}
+
+bool MicrophonePanel::LoadWhisperModel(const std::string& modelPath, const std::string& vadModelPath) {
+    if (!transcriber_) return false;
+    if (!modelPath.empty()) whisperModelPath_ = modelPath; // DEBUG UI 表示にも反映
+    if (!vadModelPath.empty()) vadModelPath_ = vadModelPath;
+    if (transcriber_->IsModelLoaded()) return true;
+    if (transcriber_->LoadModel(whisperModelPath_)) {
+        transcriber_->SetVadModelPath(vadModelPath_);
+        return true;
+    }
+    return false;
+}
+
+bool MicrophonePanel::IsModelLoaded() const {
+    return transcriber_ && transcriber_->IsModelLoaded();
+}
+
 void MicrophonePanel::ApplyEffectiveVocabulary() {
     // ユーザー語彙 ∪ 学習済み固有名詞（重複除去）
     std::vector<std::string> names = SplitLines(vocabularyText_);

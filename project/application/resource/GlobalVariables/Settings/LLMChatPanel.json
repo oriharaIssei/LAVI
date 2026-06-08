@@ -6,8 +6,11 @@
         "AutoObserveScreen": false,
         "AutoObserveWebCam": true,
         "EnableWebSearch": false,
+        "LocalEnableThinking": false,
         "PlayFiller": true,
         "SpeakResponse": false,
+        "UseKnowledgeBase": true,
+        "UseLocalLLM": false,
         "UseMemoryContext": true,
         "UseWhisper": false
     }

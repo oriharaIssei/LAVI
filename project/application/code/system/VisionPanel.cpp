@@ -10,14 +10,17 @@
 
 void VisionPanel::Initialize(SharedMediaContext* ctx) {
     ctx_ = ctx;
-    visionAnalyzer_ = std::make_unique<VisionAnalyzer>();
+    // VisionAnalyzer の所有・公開は VisionSystem(ECS 分解) へ移譲。Draw で ctx から pull する。
 }
 
 void VisionPanel::Finalize() {
-    visionAnalyzer_.reset();
+    ctx_ = nullptr;
 }
 
 void VisionPanel::Draw() {
+    // 所有は VisionSystem。共有インスタンスを LaviContext(ctx_) から引いて使う（ECS 分解）。
+    visionAnalyzer_ = ctx_->visionAnalyzer; // null の可能性あり（下の canAnalyze で個別ガード）
+
     ImGui::Text("Vision (Claude API)");
     ImGui::Separator();
 
@@ -69,7 +72,7 @@ void VisionPanel::Draw() {
 
     bool hasSource = (visionSource_ == 0 && ctx_->webCamera && ctx_->webCamera->IsCapturing())
                   || (visionSource_ == 1 && ctx_->screenCapture && ctx_->screenCapture->IsCapturing());
-    bool canAnalyze = hasSource && !ctx_->config.apiKey.empty() && !isVisionAnalyzing_;
+    bool canAnalyze = hasSource && visionAnalyzer_ && !ctx_->config.apiKey.empty() && !isVisionAnalyzing_;
 
     if (!canAnalyze) ImGui::BeginDisabled();
     if (ImGui::Button("Analyze")) {

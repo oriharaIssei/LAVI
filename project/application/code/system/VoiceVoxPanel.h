@@ -1,13 +1,11 @@
 #pragma once
 
-#include <future>
-#include <memory>
 #include <string>
-
-#include "VoiceVoxClient.h"
 
 struct SharedMediaContext;
 
+// VoiceVox の調整 UI（DEBUG 限定）。VoiceVoxClient の所有・エンジン起動は VoiceVoxSystem へ移譲（ECS 分解）。
+// Draw 入口で LaviContext::Get().voiceVox を pull して操作する（init 順非依存・null ガード）。
 class VoiceVoxPanel {
 public:
     void Initialize(SharedMediaContext* ctx);
@@ -17,7 +15,5 @@ public:
 private:
     SharedMediaContext* ctx_ = nullptr;
 
-    std::unique_ptr<VoiceVoxClient> voiceVox_;
-    std::string voiceVoxEnginePath_ = "application/resource/voiceVox/windows-nvidia/run.exe";
     std::string voiceVoxText_;
 };

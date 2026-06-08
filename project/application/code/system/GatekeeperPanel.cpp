@@ -1,6 +1,8 @@
 #include "GatekeeperPanel.h"
 #include "SharedMediaContext.h"
 #include "GatekeeperManager.h"
+#include "GatekeeperConfig.h"
+#include "LaviContext.h"
 
 #define ENGINE_INCLUDE
 #define ENGINE_MEDIA_CAPTURE
@@ -23,14 +25,31 @@ int InputTextResize(ImGuiInputTextCallbackData* data) {
 }
 }  // namespace
 
-void GatekeeperPanel::Initialize(SharedMediaContext* ctx, GatekeeperManager* mgr) {
+void GatekeeperPanel::Initialize(SharedMediaContext* ctx) {
     ctx_ = ctx;
-    mgr_ = mgr;
+    // GatekeeperManager は GatekeeperSystem 所有。初期化順に依存しないよう、各 GK への既定
+    // パラメータ反映（PushCameraParams 等）は初回 Draw で mgr_ を pull してから行う（ECS 分解）。
 
-    // 既定パラメータを各 GK に反映
-    PushCameraParams();
-    PushScreenParams();
-    ApplyKeywords();
+    // GK パラメータは JSON 設定（GatekeeperConfig）を唯一のソースとする（mem:feedback_no_hardcode）。
+    // 各 GateSystem も同設定をロードして GK へ適用する。本パネルは編集 UI として同値を保持・保存する。
+    const GatekeeperConfigData cfg = LoadGatekeeperConfig();
+    ferModelPath_ = cfg.ferModelPath;
+    haarPath_     = cfg.haarPath;
+    camUseGpu_    = cfg.camUseGpu;
+    camThreshold_ = cfg.camThreshold;
+    scaleFactor_  = cfg.scaleFactor;
+    minNeighbors_ = cfg.minNeighbors;
+    minFaceSize_  = cfg.minFaceSize;
+    confirmFrames_ = cfg.confirmFrames;
+    ignoreNeutral_ = cfg.ignoreNeutral;
+    neutralBias_   = cfg.neutralBias;
+    watchFg_   = cfg.watchFg;
+    detectNew_ = cfg.detectNew;
+    useScreenDiff_ = cfg.useScreenDiff;
+    screenDiffThreshold_ = cfg.screenDiffThreshold;
+    pixelDiffThreshold_  = cfg.pixelDiffThreshold;
+    keywordText_   = cfg.keywordsText;
+    caseSensitive_ = cfg.caseSensitive;
 
     // ウェイクワードバッファ初期化
     std::strncpy(wakeWordBuf_, ctx_->wakeWord.c_str(), sizeof(wakeWordBuf_) - 1);
@@ -79,10 +98,43 @@ void GatekeeperPanel::ApplyKeywords() {
     mgr_->Mic()->SetCaseSensitive(caseSensitive_);
 }
 
+void GatekeeperPanel::SyncOnce() {
+    // 既定パラメータを各 GK に一度だけ反映（旧 Initialize 相当）。Draw はタブ選択時しか呼ばれない
+    // ため、起動時に確実に反映されるよう毎フレーム無条件に呼ばれる本メソッドで行う。
+    if (paramsPushed_) return;
+    mgr_ = LaviContext::Get().gkManager; // GatekeeperSystem が公開した共有を参照
+    if (!mgr_) return;
+    PushCameraParams();
+    PushScreenParams();
+    ApplyKeywords();
+    paramsPushed_ = true;
+}
+
 void GatekeeperPanel::Draw() {
+    mgr_ = LaviContext::Get().gkManager; // GatekeeperSystem が公開した共有を参照
+    if (!mgr_) return;
+
     auto& cfg = mgr_->config();
 
     ImGui::Text("Gatekeeper (integrated)");
+    ImGui::SameLine();
+    if (ImGui::Button("Save Config")) {
+        // 現在の統合フラグ(mgr config) + 各 GK パラメータ(パネル状態) を JSON 設定へ永続化。
+        GatekeeperConfigData out;
+        out.camEnabled = cfg.camEnabled; out.screenEnabled = cfg.screenEnabled; out.micEnabled = cfg.micEnabled;
+        out.camInterval = cfg.camInterval; out.screenInterval = cfg.screenInterval; out.micInterval = cfg.micInterval;
+        out.combineWindow = cfg.combineWindow; out.autoEscalate = cfg.autoEscalate;
+        out.escalateCooldown = cfg.escalateCooldown; out.autoSpeak = cfg.autoSpeak;
+        out.useLocalLLM = cfg.useLocalLLM; out.useWebContext = cfg.useWebContext;
+        out.ferModelPath = ferModelPath_; out.haarPath = haarPath_; out.camUseGpu = camUseGpu_;
+        out.camThreshold = camThreshold_; out.scaleFactor = scaleFactor_;
+        out.minNeighbors = minNeighbors_; out.minFaceSize = minFaceSize_; out.confirmFrames = confirmFrames_;
+        out.ignoreNeutral = ignoreNeutral_; out.neutralBias = neutralBias_;
+        out.watchFg = watchFg_; out.detectNew = detectNew_; out.useScreenDiff = useScreenDiff_;
+        out.screenDiffThreshold = screenDiffThreshold_; out.pixelDiffThreshold = pixelDiffThreshold_;
+        out.keywordsText = keywordText_; out.caseSensitive = caseSensitive_;
+        SaveGatekeeperConfig(out);
+    }
     ImGui::Separator();
 
     // ===== Integration =====

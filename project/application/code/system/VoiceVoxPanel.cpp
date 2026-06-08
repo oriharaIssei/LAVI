@@ -1,49 +1,37 @@
 #include "VoiceVoxPanel.h"
 #include "SharedMediaContext.h"
+#include "VoiceVoxClient.h"
 
 #include "imgui/imgui.h"
 
 void VoiceVoxPanel::Initialize(SharedMediaContext* ctx) {
+    // VoiceVoxClient の所有・エンジン起動は VoiceVoxSystem。本パネルは ctx から pull するだけ。
     ctx_ = ctx;
-    voiceVox_ = std::make_unique<VoiceVoxClient>();
-    ctx_->voiceVox = voiceVox_.get();
 }
 
 void VoiceVoxPanel::Finalize() {
-    if (voiceVox_) {
-        voiceVox_->Stop();
-    }
-    if (ctx_->speakFuture.valid()) {
-        ctx_->speakFuture.wait();
-        ctx_->isSpeaking = false;
-    }
-    if (voiceVox_) {
-        voiceVox_->StopEngine();
-    }
-    voiceVox_.reset();
-    ctx_->voiceVox = nullptr;
+    // エンジン停止・後始末は VoiceVoxSystem::Finalize が担う。
+    ctx_ = nullptr;
 }
 
 void VoiceVoxPanel::Draw() {
     ImGui::Text("VoiceVox (Text-to-Speech)");
     ImGui::Separator();
 
-    ImGui::InputText("Engine Path", voiceVoxEnginePath_.data(), voiceVoxEnginePath_.capacity() + 1,
-        ImGuiInputTextFlags_CallbackResize, [](ImGuiInputTextCallbackData* data) -> int {
-            if (data->EventFlag == ImGuiInputTextFlags_CallbackResize) {
-                auto* str = static_cast<std::string*>(data->UserData);
-                str->resize(data->BufTextLen);
-                data->Buf = str->data();
-            }
-            return 0;
-        }, &voiceVoxEnginePath_);
+    // 所有は VoiceVoxSystem。共有インスタンスを pull する（起動も System が自動で行う）。
+    VoiceVoxClient* voiceVox_ = ctx_->voiceVox;
+    if (!voiceVox_) {
+        ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "(VoiceVoxSystem 未初期化)");
+        return;
+    }
 
     bool engineRunning = voiceVox_->IsEngineRunning();
     bool engineReady = engineRunning && voiceVox_->IsEngineReady();
 
     if (!engineRunning) {
+        // 通常は VoiceVoxSystem が自動起動するが、失敗時の手動再起動用に残す。
         if (ImGui::Button("Start Engine")) {
-            voiceVox_->StartEngine(voiceVoxEnginePath_);
+            voiceVox_->StartEngine("application/resource/voiceVox/windows-nvidia/run.exe");
             if (voiceVox_->IsEngineReady()) {
                 ctx_->voiceVoxSpeakers = voiceVox_->GetSpeakers();
             }

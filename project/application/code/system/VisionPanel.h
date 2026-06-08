@@ -1,10 +1,9 @@
 #pragma once
 
 #include <future>
-#include <memory>
 #include <string>
 
-#include "VisionAnalyzer.h"
+#include "VisionAnalyzer.h" // VisionResult / future の完全型に必要
 
 struct SharedMediaContext;
 
@@ -17,7 +16,7 @@ public:
 private:
     SharedMediaContext* ctx_ = nullptr;
 
-    std::unique_ptr<VisionAnalyzer> visionAnalyzer_;
+    VisionAnalyzer* visionAnalyzer_ = nullptr; // VisionSystem 所有。Draw 冒頭で ctx から pull（非所有）
     std::string visionResult_;
     std::future<VisionResult> visionFuture_;
     bool isVisionAnalyzing_ = false;

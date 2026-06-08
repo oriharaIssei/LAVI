@@ -10,28 +10,30 @@
 #include "util/StringUtil.h"
 
 void WebCameraPanel::Initialize(SharedMediaContext* ctx) {
+    // WebCamera の所有・StaticInitialize/起動は WebCameraSystem。本パネルは ctx から pull するだけ。
     ctx_ = ctx;
-
-    OriGine::WebCamera::StaticInitialize();
-
-    webCamera_ = std::make_unique<OriGine::WebCamera>();
-    camDevices_ = OriGine::WebCamera::EnumerateDevices();
-
-    ctx_->webCamera = webCamera_.get();
 }
 
 void WebCameraPanel::Finalize() {
-    if (webCamera_) {
-        webCamera_->StopCapture();
-        webCamera_->Close();
-    }
+    // キャプチャ停止・StaticFinalize は WebCameraSystem。パネル所有の preview テクスチャのみ解放。
     camPreview_.Release(OriGine::Engine::GetInstance()->GetSrvHeap());
-    webCamera_.reset();
-
-    OriGine::WebCamera::StaticFinalize();
+    webCamera_ = nullptr;
+    ctx_ = nullptr;
 }
 
 void WebCameraPanel::Draw() {
+    // 所有は WebCameraSystem。共有インスタンスを pull する。
+    webCamera_ = ctx_->webCamera;
+    if (!webCamera_) {
+        ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "(WebCameraSystem 未初期化)");
+        return;
+    }
+
+    // デバイス一覧は初回のみ列挙（StaticInitialize は System が実施済み）。
+    if (camDevices_.empty()) {
+        camDevices_ = OriGine::WebCamera::EnumerateDevices();
+    }
+
     ImGui::Text("Devices: %d", static_cast<int>(camDevices_.size()));
     ImGui::Separator();
 
