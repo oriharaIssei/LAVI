@@ -1,6 +1,8 @@
 #include "VisionPanel.h"
 #include "SharedMediaContext.h"
 #include "AppConfig.h"
+#include "VisionAnalyzer.h" // VisionAnalyzer::Frame（マルチフレーム）
+#include "FrameHistory.h"
 
 #define ENGINE_INCLUDE
 #define ENGINE_MEDIA_CAPTURE
@@ -77,30 +79,39 @@ void VisionPanel::Draw() {
     if (!canAnalyze) ImGui::BeginDisabled();
     if (ImGui::Button("Analyze")) {
         visionAnalyzer_->SetApiKey(ctx_->config.apiKey);
-        visionAnalyzer_->SetPrompt(ctx_->config.visionPrompt);
 
-        const uint8_t* data = nullptr;
-        uint32_t w = 0, h = 0;
+        // 動画モードでは選択ソースの直近フレームを時系列に複数枚サンプルして送る。
+        const bool videoMode = ctx_->config.visionVideoEnabled;
+        const int sampleK    = (ctx_->config.visionVideoFrames < 1) ? 1 : ctx_->config.visionVideoFrames;
+        FrameHistory* hist   = (visionSource_ == 0) ? ctx_->cameraHistory : ctx_->screenHistory;
+        std::shared_ptr<const CapturedFrame> latest =
+            (visionSource_ == 0) ? ctx_->cameraFrame : ctx_->screenFrame;
 
-        if (visionSource_ == 0) {
-            uint32_t fw = 0, fh = 0;
-            if (ctx_->webCamera->GetLatestFrame(ctx_->camFrameBuffer, fw, fh) && fw > 0 && fh > 0) {
-                data = ctx_->camFrameBuffer.data();
-                w = fw;
-                h = fh;
-            }
-        } else {
-            uint32_t fw = 0, fh = 0;
-            if (ctx_->screenCapture->GetLatestFrame(ctx_->screenFrameBuffer, fw, fh) && fw > 0 && fh > 0) {
-                data = ctx_->screenFrameBuffer.data();
-                w = fw;
-                h = fh;
-            }
+        std::vector<std::shared_ptr<const CapturedFrame>> samples;
+        if (videoMode && hist) {
+            samples = hist->Sample(sampleK);
+        } else if (latest) {
+            samples.push_back(latest);
         }
 
-        if (data && w > 0 && h > 0) {
+        std::vector<VisionAnalyzer::Frame> vframes; // AnalyzeAsync が同期コピーするので samples 生存で十分
+        for (auto& f : samples) {
+            if (!f || f->pixels.empty()) continue;
+            vframes.push_back({f->pixels.data(), f->width, f->height});
+        }
+
+        std::string prompt = ctx_->config.visionPrompt;
+        if (vframes.size() > 1) {
+            prompt = "以下は時系列に並んだフレーム（古い順）です。動き・変化・進行に注目してください。\n" + prompt;
+        }
+        visionAnalyzer_->SetPrompt(prompt);
+
+        if (vframes.size() == 1) {
             isVisionAnalyzing_ = true;
-            visionFuture_ = visionAnalyzer_->AnalyzeAsync(data, w, h);
+            visionFuture_ = visionAnalyzer_->AnalyzeAsync(vframes[0].bgra, vframes[0].width, vframes[0].height);
+        } else if (vframes.size() > 1) {
+            isVisionAnalyzing_ = true;
+            visionFuture_ = visionAnalyzer_->AnalyzeAsync(vframes);
         }
     }
     if (!canAnalyze) ImGui::EndDisabled();

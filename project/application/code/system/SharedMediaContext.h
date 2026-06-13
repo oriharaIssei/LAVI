@@ -10,6 +10,9 @@
 #include "CameraGatekeeper.h" // EmotionResult を値で保持するため
 #include "ScreenGatekeeper.h" // ScreenGateResult
 #include "MicGatekeeper.h"    // MicGateResult
+#include "component/CapturedFrame.h" // 不変フレームスナップショット
+
+#include <memory>
 
 namespace OriGine {
 class Microphone;
@@ -31,6 +34,7 @@ class LongTermMemory;
 class LocalLLM;
 class VisionAnalyzer;
 class LocalVisionAnalyzer;
+class FrameHistory;
 
 struct SharedMediaContext {
     AppConfigData config;
@@ -64,8 +68,17 @@ struct SharedMediaContext {
     OriGine::WebCamera* webCamera = nullptr;
     OriGine::ScreenCapture* screenCapture = nullptr; // 主モニタ（screen-diff 用・先頭）
     std::vector<OriGine::ScreenCapture*> screenCaptures; // 撮影中の全モニタ（ScreenCaptureSystem 所有）
-    std::vector<uint8_t> camFrameBuffer;
-    std::vector<uint8_t> screenFrameBuffer;
+
+    // フレーム供給のデータフロー（ECS 化）。プロデューサ（WebCameraSystem/ScreenCaptureSystem）が
+    // 新フレームごとに不変スナップショットを発行し、消費者は shared_ptr をコピーして掴む。
+    // 旧来の共有スクラッチ（camFrameBuffer/screenFrameBuffer に各自 GetLatestFrame）を置き換える。
+    std::shared_ptr<const CapturedFrame> cameraFrame;                 // 直近のカメラフレーム
+    std::shared_ptr<const CapturedFrame> screenFrame;                 // 直近の主モニタフレーム（先頭）
+    std::vector<std::shared_ptr<const CapturedFrame>> screenFrames;   // 全撮影モニタのフレーム（先頭=主）
+
+    // 「動画的解釈」用の時系列リング（プロデューサ所有・公開）。消費者は Sample(K) で時系列フレームを取得。
+    FrameHistory* cameraHistory = nullptr; // WebCameraSystem 所有
+    FrameHistory* screenHistory = nullptr; // ScreenCaptureSystem 所有（主モニタ）
 
     VoiceVoxClient* voiceVox = nullptr;
     std::vector<VoiceVoxSpeaker> voiceVoxSpeakers;

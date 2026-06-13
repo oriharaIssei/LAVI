@@ -79,10 +79,9 @@ void ScreenCapturePanel::Draw() {
     if (screenCapture_->IsCapturing()) {
         ImGui::Text("Resolution: %ux%u", screenCapture_->GetWidth(), screenCapture_->GetHeight());
 
-        uint32_t fw = 0, fh = 0;
-        if (screenCapture_->GetLatestFrame(ctx_->screenFrameBuffer, fw, fh) && fw > 0 && fh > 0) {
-            UploadPreviewFrame(screenPreview_, ctx_->screenFrameBuffer.data(),
-                static_cast<uint32_t>(ctx_->screenFrameBuffer.size()), fw, fh);
+        if (auto sf = ctx_->screenFrame; sf && !sf->pixels.empty()) {
+            UploadPreviewFrame(screenPreview_, sf->pixels.data(),
+                static_cast<uint32_t>(sf->pixels.size()), sf->width, sf->height);
         }
 
         if (screenPreview_.texture && screenPreview_.srvDescriptor.GetGpuHandle().ptr != 0) {

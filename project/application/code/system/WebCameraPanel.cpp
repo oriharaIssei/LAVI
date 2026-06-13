@@ -73,10 +73,9 @@ void WebCameraPanel::Draw() {
     if (webCamera_->IsCapturing()) {
         ImGui::Text("Resolution: %ux%u", webCamera_->GetWidth(), webCamera_->GetHeight());
 
-        uint32_t fw = 0, fh = 0;
-        if (webCamera_->GetLatestFrame(ctx_->camFrameBuffer, fw, fh) && fw > 0 && fh > 0) {
-            UploadPreviewFrame(camPreview_, ctx_->camFrameBuffer.data(),
-                static_cast<uint32_t>(ctx_->camFrameBuffer.size()), fw, fh);
+        if (auto cf = ctx_->cameraFrame; cf && !cf->pixels.empty()) {
+            UploadPreviewFrame(camPreview_, cf->pixels.data(),
+                static_cast<uint32_t>(cf->pixels.size()), cf->width, cf->height);
         }
 
         if (camPreview_.texture && camPreview_.srvDescriptor.GetGpuHandle().ptr != 0) {

@@ -4,6 +4,7 @@
 #include <fstream>
 #include "SharedMediaContext.h"
 #include "AppConfig.h"
+#include "FrameHistory.h"
 #include "EmotionTag.h"
 #include "MemoryPanel.h"
 #include "KnowledgeBase.h"
@@ -779,19 +780,22 @@ void LLMChatPanel::Draw() {
             llmAutoObserveLastTime_ = now;
 
             std::vector<LLMClient::ImageFrame> frames;
-
-            if (llmAutoObserveWebCam_ && ctx_->webCamera && ctx_->webCamera->IsCapturing()) {
-                uint32_t fw = 0, fh = 0;
-                if (ctx_->webCamera->GetLatestFrame(ctx_->camFrameBuffer, fw, fh) && fw > 0 && fh > 0) {
-                    frames.push_back({ctx_->camFrameBuffer.data(), fw, fh});
+            // 動画モードでは時系列フレームを複数枚送る。holds でサンプルを生存させる。
+            std::vector<std::shared_ptr<const CapturedFrame>> holds;
+            const bool videoMode = ctx_->config.visionVideoEnabled;
+            const int sampleK    = (ctx_->config.visionVideoFrames < 1) ? 1 : ctx_->config.visionVideoFrames;
+            auto addSrc = [&](FrameHistory* hist, const std::shared_ptr<const CapturedFrame>& latest) {
+                std::vector<std::shared_ptr<const CapturedFrame>> s;
+                if (videoMode && hist) s = hist->Sample(sampleK);
+                else if (latest) s.push_back(latest);
+                for (auto& f : s) {
+                    if (!f || f->pixels.empty()) continue;
+                    holds.push_back(f);
+                    frames.push_back({f->pixels.data(), f->width, f->height});
                 }
-            }
-            if (llmAutoObserveScreen_ && ctx_->screenCapture && ctx_->screenCapture->IsCapturing()) {
-                uint32_t fw = 0, fh = 0;
-                if (ctx_->screenCapture->GetLatestFrame(ctx_->screenFrameBuffer, fw, fh) && fw > 0 && fh > 0) {
-                    frames.push_back({ctx_->screenFrameBuffer.data(), fw, fh});
-                }
-            }
+            };
+            if (llmAutoObserveWebCam_) addSrc(ctx_->cameraHistory, ctx_->cameraFrame);
+            if (llmAutoObserveScreen_) addSrc(ctx_->screenHistory, ctx_->screenFrame);
 
             if (!frames.empty()) {
                 std::string observePrompt =
@@ -859,19 +863,22 @@ void LLMChatPanel::Draw() {
         // キーワード事前判定は廃止。実行は応答受信時（ParseAndExecute）に行う。
         {
             std::vector<LLMClient::ImageFrame> frames;
-
-            if (llmAttachWebCam_ && ctx_->webCamera && ctx_->webCamera->IsCapturing()) {
-                uint32_t fw = 0, fh = 0;
-                if (ctx_->webCamera->GetLatestFrame(ctx_->camFrameBuffer, fw, fh) && fw > 0 && fh > 0) {
-                    frames.push_back({ctx_->camFrameBuffer.data(), fw, fh});
+            // 動画モードでは時系列フレームを複数枚送る。holds で SendLLMRequest のコピーまで生存させる。
+            std::vector<std::shared_ptr<const CapturedFrame>> holds;
+            const bool videoMode = ctx_->config.visionVideoEnabled;
+            const int sampleK    = (ctx_->config.visionVideoFrames < 1) ? 1 : ctx_->config.visionVideoFrames;
+            auto addSrc = [&](FrameHistory* hist, const std::shared_ptr<const CapturedFrame>& latest) {
+                std::vector<std::shared_ptr<const CapturedFrame>> s;
+                if (videoMode && hist) s = hist->Sample(sampleK);
+                else if (latest) s.push_back(latest);
+                for (auto& f : s) {
+                    if (!f || f->pixels.empty()) continue;
+                    holds.push_back(f);
+                    frames.push_back({f->pixels.data(), f->width, f->height});
                 }
-            }
-            if (llmAttachScreen_ && ctx_->screenCapture && ctx_->screenCapture->IsCapturing()) {
-                uint32_t fw = 0, fh = 0;
-                if (ctx_->screenCapture->GetLatestFrame(ctx_->screenFrameBuffer, fw, fh) && fw > 0 && fh > 0) {
-                    frames.push_back({ctx_->screenFrameBuffer.data(), fw, fh});
-                }
-            }
+            };
+            if (llmAttachWebCam_) addSrc(ctx_->cameraHistory, ctx_->cameraFrame);
+            if (llmAttachScreen_) addSrc(ctx_->screenHistory, ctx_->screenFrame);
 
             SendLLMRequest(llmUserInput_, frames, llmPlayFiller_);
             llmUserInput_.clear();

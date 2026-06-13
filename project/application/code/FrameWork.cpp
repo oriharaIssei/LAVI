@@ -15,6 +15,7 @@
 
 /// application components
 #include "system/component/CapturePromptComponent.h"
+#include "system/component/CapturedFrameComponent.h"
 #include "system/component/ui/UIElementComponent.h"
 #include "system/component/ui/UIButtonComponent.h"
 #include "system/component/ui/UISliderComponent.h"
@@ -93,6 +94,7 @@ void RegisterUsingComponents(){
 	componentRegistry->RegisterComponent<SpriteRenderer>(); // UI 背景クワッド（白1x1 を color で塗る）
 
 	componentRegistry->RegisterComponent<CapturePromptComponent>();
+	componentRegistry->RegisterComponent<CapturedFrameComponent>(); // キャプチャフレームの不変スナップショット供給
 
 	// UI フレームワーク（ECS リテインドモード UI）
 	componentRegistry->RegisterComponent<UIElementComponent>();

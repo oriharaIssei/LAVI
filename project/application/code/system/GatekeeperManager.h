@@ -9,6 +9,7 @@
 #include "ScreenGatekeeper.h"
 #include "MicGatekeeper.h"
 #include "LLMClient.h"
+#include "LocalLLM.h"
 
 #include <future>
 
@@ -17,7 +18,6 @@ class LongTermMemory;
 class KnowledgeBase;
 class WebSearchClient;
 class ActionPipeline;
-class LocalLLM;
 
 enum class GateSource { Camera, Screen, Mic };
 
@@ -74,6 +74,8 @@ public:
         float autoObserveInterval = 10.0f; // 観察間隔 (秒)
 
         bool visionUseLocal = false; // 画像処理をローカル VLM(Qwen2.5-VL) で行う（false=クラウド）
+
+        int maxReactIterations = 4; // ツール実行→観測→再思考の最大反復回数
     };
 
     GatekeeperManager();
@@ -137,6 +139,12 @@ private:
     void Dispatch(const RouteDecision& dec, double now);
     void PollLlm();
     void Speak(const std::string& text);
+    std::string BuildReactSystemPrompt(const std::string& basePrompt) const;
+    std::string BuildRecentDecisionContext() const;
+    std::string ExecuteTaggedToolsAndBuildObservation(const std::string& content);
+    bool ContinueReactLoop(const std::string& content, const std::string& observation);
+    void FinalizeLlmResponse(const std::string& content);
+    void ResetReactState();
 
     SharedMediaContext* ctx_ = nullptr;
 
@@ -156,6 +164,12 @@ private:
     bool llmBusy_ = false;
     std::string lastResponse_;
     double lastEscalate_ = -1.0e9;
+    bool reactActive_ = false;
+    bool reactUseLocal_ = false;
+    bool reactForceFinal_ = false;
+    int reactIteration_ = 0;
+    std::string reactSystemPrompt_;
+    std::vector<LocalChatMessage> reactMessages_;
     LongTermMemory* longTermMemory_ = nullptr;
     KnowledgeBase* knowledgeBase_ = nullptr;  // 知識ベース RAG（共有。KnowledgeSystem 公開。入口で LaviContext から引く）
     WebSearchClient* webSearch_ = nullptr;    // Web 検索（時事対策。共有インスタンス。所有しない）

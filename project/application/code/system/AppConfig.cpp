@@ -63,6 +63,9 @@ AppConfigData LoadAppConfig() {
     cfg.visionPrompt = *gv->AddValue<std::string>(kScene, kGroup, "Vision_Prompt",
         std::string(AppConfigData::DefaultVisionPrompt()));
     cfg.minimizeToTrayOnClose = *gv->AddValue<bool>(kScene, kGroup, "MinimizeToTrayOnClose", false);
+    cfg.visionVideoEnabled = *gv->AddValue<bool>(kScene, kGroup, "VisionVideoEnabled", true);
+    cfg.visionVideoFrames = *gv->AddValue<int>(kScene, kGroup, "VisionVideoFrames", 3);
+    cfg.visionVideoWindowSec = *gv->AddValue<float>(kScene, kGroup, "VisionVideoWindowSec", 1.5f);
     return cfg;
 }
 
@@ -72,5 +75,8 @@ void SaveAppConfig(const AppConfigData& config) {
     gv->SetValue(kScene, kGroup, "LLM_SystemPrompt", config.llmSystemPrompt);
     gv->SetValue(kScene, kGroup, "Vision_Prompt", config.visionPrompt);
     gv->SetValue(kScene, kGroup, "MinimizeToTrayOnClose", config.minimizeToTrayOnClose);
+    gv->SetValue(kScene, kGroup, "VisionVideoEnabled", config.visionVideoEnabled);
+    gv->SetValue(kScene, kGroup, "VisionVideoFrames", config.visionVideoFrames);
+    gv->SetValue(kScene, kGroup, "VisionVideoWindowSec", config.visionVideoWindowSec);
     gv->SaveFile(kScene, kGroup);
 }

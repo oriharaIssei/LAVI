@@ -202,11 +202,14 @@ void MemoryPanel::Update() {
         !userIdentifier_->FaceProfiles().empty()) {
         identifyTimer_ = 0.0f;
         auto& camResult = gkManager_->CameraResult();
-        if (camResult.faceDetected && camResult.faceW > 0 && !ctx_->camFrameBuffer.empty()) {
+        auto camFrame   = ctx_->cameraFrame; // 不変スナップショットを掴む
+        // 顔矩形は camResult を算出したフレームの座標系。seq 一致時のみ切り出す（整合保証）。
+        if (camResult.faceDetected && camResult.faceW > 0 && camFrame &&
+            camFrame->seq == camResult.frameSeq && !camFrame->pixels.empty()) {
             auto embedding = userIdentifier_->ExtractFaceEmbedding(
-                ctx_->camFrameBuffer.data(),
-                gkManager_->CameraFrameWidth(),
-                gkManager_->CameraFrameHeight(),
+                camFrame->pixels.data(),
+                camFrame->width,
+                camFrame->height,
                 camResult.faceX, camResult.faceY, camResult.faceW, camResult.faceH);
             if (!embedding.empty()) {
                 auto result = userIdentifier_->IdentifyFace(embedding);
@@ -658,11 +661,13 @@ void MemoryPanel::Draw() {
         ImGui::InputText("Name##register", registerNameBuf_, sizeof(registerNameBuf_));
         bool canRegister = registerNameBuf_[0] != '\0';
 
-        bool hasCamFrame = ctx_->webCamera && !ctx_->camFrameBuffer.empty();
+        auto regCamFrame = ctx_->cameraFrame;
+        bool hasCamFrame = regCamFrame && !regCamFrame->pixels.empty();
         if (!canRegister || !hasCamFrame) ImGui::BeginDisabled();
         if (ImGui::Button("Register Face##uid")) {
             auto embedding = userIdentifier_->ExtractFaceEmbedding(
-                ctx_->camFrameBuffer.data(), 640, 480, 0, 0, 640, 480);
+                regCamFrame->pixels.data(), regCamFrame->width, regCamFrame->height,
+                0, 0, regCamFrame->width, regCamFrame->height);
             if (!embedding.empty()) {
                 userIdentifier_->RegisterFace(registerNameBuf_, embedding);
                 userIdentifier_->Save("application/resource/memory");

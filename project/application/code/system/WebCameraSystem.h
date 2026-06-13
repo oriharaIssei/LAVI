@@ -2,6 +2,10 @@
 
 #include "system/ISystem.h"
 
+#include "FrameHistory.h"
+
+#include <atomic>
+#include <cstdint>
 #include <memory>
 
 namespace OriGine { class WebCamera; }
@@ -25,9 +29,18 @@ public:
     void Finalize() override;
 
 protected:
-    void Update() override {} // キャプチャは内部スレッド駆動。フレーム取得は消費側が行う
+    // 新フレーム到着時のみ 1 回だけ GetLatestFrame して不変スナップショットを発行する
+    // （ctx.cameraFrame と CapturedFrameComponent）。各消費者の個別 GetLatestFrame を置き換える。
+    void Update() override;
 
 private:
     std::unique_ptr<OriGine::WebCamera> webCamera_;
     bool staticInitialized_ = false;
+
+    // フレーム供給（プロデューサ）。frameDirty_ はキャプチャスレッドのコールバックから立つ。
+    std::atomic<bool> frameDirty_{false};
+    uint64_t frameSeq_ = 0;
+    OriGine::EntityHandle frameEntity_; // CapturedFrameComponent を持つユニークエンティティ
+
+    FrameHistory history_; // 「動画的解釈」用の時系列リング
 };

@@ -4,6 +4,10 @@
 
 #include "mediaCapture/ScreenCapture.h" // OriGine::ScreenCapture / ScreenMonitorInfo 完全定義
 
+#include "FrameHistory.h"
+
+#include <atomic>
+#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -34,8 +38,17 @@ private:
     void OpenMonitor(uint32_t _monitorIndex); // 1 モニタを開いて撮影開始し captures_ に追加
     void PublishContext();                    // ctx.screenCapture / screenCaptures を更新
 
+    void PublishFrame(); // 新フレーム時に主モニタのスナップショットを ctx / Component へ発行
+
     std::vector<std::unique_ptr<OriGine::ScreenCapture>> captures_; // 撮影中モニタ（複数同時可）
     std::vector<OriGine::ScreenMonitorInfo> monitors_;
     int selectedComboIndex_ = 0;  // 0 = 共有しない
     bool monitorsLoaded_    = false;
+
+    // フレーム供給（プロデューサ）。frameDirty_ は各キャプチャのコールバックから立つ。
+    std::atomic<bool> frameDirty_{false};
+    uint64_t frameSeq_ = 0;
+    OriGine::EntityHandle frameEntity_; // 主モニタの CapturedFrameComponent を持つユニークエンティティ
+
+    FrameHistory history_; // 「動画的解釈」用の時系列リング（主モニタ・大画面は縮小保持）
 };

@@ -33,6 +33,9 @@ struct EmotionResult {
 
     // 検出された顔の矩形 (フレーム座標系)
     int faceX = 0, faceY = 0, faceW = 0, faceH = 0;
+
+    // この結果を算出した CapturedFrame の seq（顔矩形とフレームの整合確認用）。
+    uint64_t frameSeq = 0;
 };
 
 // カメラ映像のゲートキーパー。

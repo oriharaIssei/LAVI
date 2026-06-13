@@ -135,6 +135,40 @@ VisionResult VisionAnalyzer::Analyze(const uint8_t* bgraData, uint32_t width, ui
     return result;
 }
 
+std::future<VisionResult> VisionAnalyzer::AnalyzeAsync(const std::vector<Frame>& frames) {
+    // 呼び出し側バッファ参照のため、同期的に生バイトをコピーしてから非同期化する。
+    struct Owned {
+        std::vector<uint8_t> data;
+        uint32_t w;
+        uint32_t h;
+    };
+    auto owned = std::make_shared<std::vector<Owned>>();
+    owned->reserve(frames.size());
+    for (const auto& f : frames) {
+        if (!f.bgra || f.width == 0 || f.height == 0) continue;
+        owned->push_back({std::vector<uint8_t>(f.bgra, f.bgra + static_cast<size_t>(f.width) * f.height * 4),
+                          f.width, f.height});
+    }
+    return std::async(std::launch::async, [this, owned]() -> VisionResult {
+        isAnalyzing_.store(true);
+        VisionResult result;
+        std::vector<std::string> b64;
+        b64.reserve(owned->size());
+        for (auto& o : *owned) {
+            std::string e = EncodeToBase64Jpeg(o.data.data(), o.w, o.h);
+            if (!e.empty()) b64.push_back(std::move(e));
+        }
+        if (b64.empty()) {
+            result.error = "Failed to encode frames to JPEG";
+            isAnalyzing_.store(false);
+            return result;
+        }
+        result = SendRequestMulti(b64);
+        isAnalyzing_.store(false);
+        return result;
+    });
+}
+
 std::string VisionAnalyzer::EncodeToBase64Jpeg(const uint8_t* bgraData, uint32_t width, uint32_t height) {
     // BGRA -> RGB
     std::vector<uint8_t> rgb(width * height * 3);
@@ -207,6 +241,79 @@ VisionResult VisionAnalyzer::SendRequest(const std::string& base64Image) {
         if (httpCode == 200) {
             result.description = ParseClaudeResponse(response);
             result.success = true;
+        } else {
+            result.error = "HTTP " + std::to_string(httpCode) + ": " + ParseErrorMessage(response);
+        }
+    }
+
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+    return result;
+}
+
+VisionResult VisionAnalyzer::SendRequestMulti(const std::vector<std::string>& base64Images) {
+    VisionResult result;
+
+    std::string apiKey, model, prompt;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        apiKey = apiKey_;
+        model  = model_;
+        prompt = prompt_;
+    }
+
+    if (apiKey.empty()) {
+        result.error = "API key not set";
+        return result;
+    }
+    if (base64Images.empty()) {
+        result.error = "No images";
+        return result;
+    }
+
+    // JSON 本体を組み立てる。時系列フレームを image ブロックとして並べ、最後に text プロンプト。
+    std::ostringstream body;
+    body << R"({"model":")" << model << R"(",)";
+    body << R"("max_tokens":1024,)";
+    body << R"("messages":[{"role":"user","content":[)";
+    for (const auto& img : base64Images) {
+        body << R"({"type":"image","source":{"type":"base64","media_type":"image/jpeg","data":")" << img << R"("}},)";
+    }
+    body << R"({"type":"text","text":")" << prompt << R"("})";
+    body << R"(]}]})";
+
+    std::string bodyStr = body.str();
+
+    CURL* curl = curl_easy_init();
+    if (!curl) {
+        result.error = "Failed to initialize curl";
+        return result;
+    }
+
+    std::string response;
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    headers = curl_slist_append(headers, ("x-api-key: " + apiKey).c_str());
+    headers = curl_slist_append(headers, "anthropic-version: 2023-06-01");
+
+    curl_easy_setopt(curl, CURLOPT_URL, "https://api.anthropic.com/v1/messages");
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, bodyStr.c_str());
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(bodyStr.size()));
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L); // ワーカースレッドの libcurl はシグナル無効が必須
+
+    CURLcode res = curl_easy_perform(curl);
+    if (res != CURLE_OK) {
+        result.error = std::string("curl error: ") + curl_easy_strerror(res);
+    } else {
+        long httpCode = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+        if (httpCode == 200) {
+            result.description = ParseClaudeResponse(response);
+            result.success     = true;
         } else {
             result.error = "HTTP " + std::to_string(httpCode) + ": " + ParseErrorMessage(response);
         }

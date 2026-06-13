@@ -16,6 +16,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <sstream>
 
 namespace {
 // （Join はキャプチャ評価とともに Screen/MicGateSystem へ移譲したため削除）
@@ -133,13 +134,13 @@ static bool ContainsSummaryKeyword(const std::string& text) {
 void GatekeeperManager::Dispatch(const RouteDecision& dec, double now) {
     if (!ctx_ || llmBusy_) return;
 
-    const bool useLocal = config_.useLocalLLM && localLLM_ && localLLM_->IsModelLoaded(); // localLLM_ は直前に pull 済み
-    if (!useLocal && ctx_->config.apiKey.empty()) return; // クラウドは API キー必須
-
     knowledgeBase_ = LaviContext::Get().knowledgeBase; // KnowledgeSystem が公開した共有を参照
     actionPipeline_ = LaviContext::Get().actionPipeline; // ActionSystem が公開した共有を参照
     localLLM_ = LaviContext::Get().localLLM; // MemoryPanel が公開した共有を参照
     longTermMemory_ = LaviContext::Get().longTermMemory; // MemoryPanel が公開した共有を参照
+
+    const bool useLocal = config_.useLocalLLM && localLLM_ && localLLM_->IsModelLoaded();
+    if (!useLocal && ctx_->config.apiKey.empty()) return; // クラウドは API キー必須
 
     std::string systemPrompt = ctx_->config.llmSystemPrompt;
 
@@ -173,6 +174,7 @@ void GatekeeperManager::Dispatch(const RouteDecision& dec, double now) {
             systemPrompt += "\n\n" + kbCtx;
         }
     }
+    systemPrompt = BuildReactSystemPrompt(systemPrompt);
 
     std::string prompt = dec.prompt;
     if (hasMic && !ctx_->transcribedText.empty()) {
@@ -187,8 +189,13 @@ void GatekeeperManager::Dispatch(const RouteDecision& dec, double now) {
                             && webSearch_->NeedsFreshInfo(ctx_->transcribedText);
 
     if (useLocal) {
+        reactActive_ = true;
+        reactUseLocal_ = true;
+        reactForceFinal_ = false;
+        reactIteration_ = 0;
         // ローカル LLM（MemoryPanel の共有インスタンス）で生成。<think> 除去・/no_think は LocalLLM 側で処理。
-        std::vector<LocalChatMessage> msgs = { {"user", prompt} };
+        reactMessages_ = { {"user", prompt} };
+        reactSystemPrompt_ = systemPrompt;
         const bool toolEnabled = config_.useWebContext && webSearch_ && webSearch_->IsEnabled();
         if (toolEnabled) {
             // モデル主導の tool use: モデルが [search:...] を出したら検索→結果を戻して再生成。
@@ -216,7 +223,7 @@ void GatekeeperManager::Dispatch(const RouteDecision& dec, double now) {
                 return WebSearchClient::StripSearchTags(out);
             });
         } else {
-            localFuture_ = localLLM_->GenerateChatStreamAsync(systemPrompt, msgs, nullptr);
+            localFuture_ = localLLM_->GenerateChatStreamAsync(reactSystemPrompt_, reactMessages_, nullptr);
         }
         llmBusy_      = true;
         lastEscalate_ = now;
@@ -224,8 +231,14 @@ void GatekeeperManager::Dispatch(const RouteDecision& dec, double now) {
     }
 
     // クラウド (Claude)
+    reactActive_ = true;
+    reactUseLocal_ = false;
+    reactForceFinal_ = false;
+    reactIteration_ = 0;
+    reactMessages_.clear();
+    reactSystemPrompt_ = systemPrompt;
     llm_.SetApiKey(ctx_->config.apiKey);
-    llm_.SetSystemPrompt(systemPrompt);
+    llm_.SetSystemPrompt(reactSystemPrompt_);
 
     bool needSummary = (dec.target == RouteTarget::WebSearch)
                        && ContainsSummaryKeyword(ctx_->transcribedText);
@@ -252,19 +265,9 @@ void GatekeeperManager::PollLlm() {
         llmBusy_ = false;
         lastResponse_ = content;
         if (!content.empty()) {
-            // チャット履歴(会話メモリ)へ LAVI の応答を記録（タグ類を除去した表示用テキスト）。
-            if (ctx_ && ctx_->conversationMemory) {
-                ctx_->conversationMemory->PushMessage(
-                    "assistant", StripEmotionTag(ActionPipeline::StripActionTags(StripWebActions(content))));
-            }
-            auto actions = ParseWebActions(content);
-            if (!actions.empty()) {
-                ExecuteWebActions(actions, longTermMemory_);
-            }
-            // Intent-Driven アクション（[action:...]）を実行
-            if (actionPipeline_) actionPipeline_->ParseAndExecute(content);
-            if (config_.autoSpeak) {
-                Speak(ActionPipeline::StripActionTags(StripWebActions(content)));
+            const std::string observation = reactForceFinal_ ? std::string{} : ExecuteTaggedToolsAndBuildObservation(content);
+            if (!ContinueReactLoop(content, observation)) {
+                FinalizeLlmResponse(content);
             }
         }
         return;
@@ -278,20 +281,149 @@ void GatekeeperManager::PollLlm() {
     llmBusy_ = false;
     lastResponse_ = resp.success ? resp.content : ("[Error] " + resp.error);
     if (resp.success) {
-        // チャット履歴(会話メモリ)へ LAVI の応答を記録（タグ類を除去した表示用テキスト）。
-        if (ctx_ && ctx_->conversationMemory) {
-            ctx_->conversationMemory->PushMessage(
-                "assistant", StripEmotionTag(ActionPipeline::StripActionTags(StripWebActions(resp.content))));
+        const std::string observation = reactForceFinal_ ? std::string{} : ExecuteTaggedToolsAndBuildObservation(resp.content);
+        if (!ContinueReactLoop(resp.content, observation)) {
+            FinalizeLlmResponse(resp.content);
         }
-        auto actions = ParseWebActions(resp.content);
-        if (!actions.empty()) {
-            ExecuteWebActions(actions, longTermMemory_);
+    } else {
+        ResetReactState();
+    }
+}
+
+std::string GatekeeperManager::BuildReactSystemPrompt(const std::string& basePrompt) const {
+    std::string prompt = basePrompt;
+    prompt +=
+        "\n\n## ReAct tool loop\n"
+        "When you need to use [action:{...}] or [browser:URL], output only the next useful action tags plus any brief natural text.\n"
+        "After the app returns a tool observation, re-plan from that observation. If the action failed or produced an empty result, try a better target/query.\n"
+        "When you have enough information or the requested action is complete, answer naturally without [action:] or [browser:] tags.\n"
+        "Do not repeat the same failing action unless the observation gives a new reason to retry.";
+
+    const std::string decisionCtx = BuildRecentDecisionContext();
+    if (!decisionCtx.empty()) {
+        prompt += "\n\n" + decisionCtx;
+    }
+    return prompt;
+}
+
+std::string GatekeeperManager::BuildRecentDecisionContext() const {
+    if (decisions_.empty()) return "";
+
+    std::ostringstream os;
+    os << "## Recent route decisions\n";
+    const size_t start = decisions_.size() > 3 ? decisions_.size() - 3 : 0;
+    for (size_t i = start; i < decisions_.size(); ++i) {
+        const auto& d = decisions_[i];
+        os << "- target=" << TargetName(d.target) << ", sources=";
+        for (size_t j = 0; j < d.sources.size(); ++j) {
+            if (j > 0) os << ",";
+            os << SourceName(d.sources[j]);
         }
-        if (actionPipeline_) actionPipeline_->ParseAndExecute(resp.content);
-        if (config_.autoSpeak) {
-            Speak(ActionPipeline::StripActionTags(StripWebActions(resp.content)));
+        os << "\n";
+    }
+    return os.str();
+}
+
+std::string GatekeeperManager::ExecuteTaggedToolsAndBuildObservation(const std::string& content) {
+    std::ostringstream obs;
+
+    const auto webActions = ParseWebActions(content);
+    if (!webActions.empty()) {
+        ExecuteWebActions(webActions, longTermMemory_);
+        obs << "Browser actions executed:\n";
+        for (const auto& action : webActions) {
+            obs << "- opened " << action.url << "\n";
         }
     }
+
+    if (content.find("[action:") != std::string::npos) {
+        if (actionPipeline_) {
+            const ActionResult result = actionPipeline_->ParseAndExecute(content);
+            obs << "Action pipeline result:\n";
+            obs << "- handled=" << (result.handled ? "true" : "false") << "\n";
+            if (!result.serviceName.empty()) obs << "- service=" << result.serviceName << "\n";
+            if (!result.query.empty()) obs << "- query=" << result.query << "\n";
+            if (!result.url.empty()) obs << "- url=" << result.url << "\n";
+            if (!result.spokenText.empty()) obs << "- spokenText=" << result.spokenText << "\n";
+            if (!actionPipeline_->LastPlanSummary().empty()) {
+                obs << "- plan=" << actionPipeline_->LastPlanSummary() << "\n";
+            }
+        } else {
+            obs << "Action pipeline result:\n- handled=false\n- error=ActionPipeline is not available\n";
+        }
+    }
+
+    return obs.str();
+}
+
+bool GatekeeperManager::ContinueReactLoop(const std::string& content, const std::string& observation) {
+    if (!reactActive_ || observation.empty()) {
+        ResetReactState();
+        return false;
+    }
+
+    reactMessages_.push_back({"assistant", content});
+    ++reactIteration_;
+
+    const int maxIterations = config_.maxReactIterations > 0 ? config_.maxReactIterations : 4;
+    if (reactIteration_ >= maxIterations) {
+        reactMessages_.push_back({
+            "user",
+            observation + "\nReAct iteration limit reached. Give the user a concise final answer without any [action:] or [browser:] tags."
+        });
+        if (reactUseLocal_) {
+            if (!localLLM_ || !localLLM_->IsModelLoaded()) {
+                ResetReactState();
+                return false;
+            }
+            localFuture_ = localLLM_->GenerateChatStreamAsync(reactSystemPrompt_, reactMessages_, nullptr);
+        } else {
+            llm_.AddMessage("user", observation + "\nReAct iteration limit reached. Give the user a concise final answer without any [action:] or [browser:] tags.");
+            llmFuture_ = llm_.SendAsync();
+        }
+        llmBusy_ = true;
+        reactForceFinal_ = true;
+        return true;
+    }
+
+    const std::string feedback =
+        observation +
+        "\nBased on this observation, either choose the next [action:] or [browser:] tag, or finish with a natural final response without tool tags.";
+
+    if (reactUseLocal_) {
+        if (!localLLM_ || !localLLM_->IsModelLoaded()) {
+            ResetReactState();
+            return false;
+        }
+        reactMessages_.push_back({"user", feedback});
+        localFuture_ = localLLM_->GenerateChatStreamAsync(reactSystemPrompt_, reactMessages_, nullptr);
+    } else {
+        llm_.AddMessage("user", feedback);
+        llmFuture_ = llm_.SendAsync();
+    }
+
+    llmBusy_ = true;
+    return true;
+}
+
+void GatekeeperManager::FinalizeLlmResponse(const std::string& content) {
+    if (ctx_ && ctx_->conversationMemory) {
+        ctx_->conversationMemory->PushMessage(
+            "assistant", StripEmotionTag(ActionPipeline::StripActionTags(StripWebActions(content))));
+    }
+    if (config_.autoSpeak) {
+        Speak(ActionPipeline::StripActionTags(StripWebActions(content)));
+    }
+    ResetReactState();
+}
+
+void GatekeeperManager::ResetReactState() {
+    reactActive_ = false;
+    reactUseLocal_ = false;
+    reactForceFinal_ = false;
+    reactIteration_ = 0;
+    reactSystemPrompt_.clear();
+    reactMessages_.clear();
 }
 
 void GatekeeperManager::SpeakProactive(const std::string& content) {

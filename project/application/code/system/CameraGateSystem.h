@@ -2,10 +2,12 @@
 
 #include "system/ISystem.h"
 
-#include <chrono>
-#include <memory>
+#include "CameraGatekeeper.h" // EmotionResult 完全定義（std::future<EmotionResult> メンバのため）
 
-class CameraGatekeeper;
+#include <chrono>
+#include <cstdint>
+#include <future>
+#include <memory>
 
 /// <summary>
 /// カメラ（表情）キャプチャ評価システム（Category=Input）。
@@ -28,4 +30,10 @@ protected:
 private:
     std::unique_ptr<CameraGatekeeper> camera_;
     std::chrono::steady_clock::time_point lastEval_{};
+
+    // 重い Evaluate（Haar+ONNX）をワーカースレッドへ退避（メインスレッドのストール解消）。
+    // 同時に 1 評価のみ（evalBusy_）＝CameraGatekeeper をワーカーが排他使用する。
+    std::future<EmotionResult> evalFuture_;
+    bool evalBusy_            = false;
+    uint64_t lastEvaluatedSeq_ = 0; // 同一フレームの二重評価を防ぐ
 };
