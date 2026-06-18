@@ -111,7 +111,7 @@ void GatekeeperManager::FlushPending(double now) {
     pending_.clear();
 
     // 自動エスカレーション
-    if (config_.autoEscalate && !llmBusy_ && (now - lastEscalate_ >= config_.escalateCooldown)) {
+    if (config_.autoEscalate && phase_ == ReactPhase::Idle && (now - lastEscalate_ >= config_.escalateCooldown)) {
         auto& latest = decisions_.back();
         // 行動判断は LLM が [action:...] タグで行う（キーワード事前判定は廃止）。
         Dispatch(latest, now);
@@ -132,7 +132,7 @@ static bool ContainsSummaryKeyword(const std::string& text) {
 }
 
 void GatekeeperManager::Dispatch(const RouteDecision& dec, double now) {
-    if (!ctx_ || llmBusy_) return;
+    if (!ctx_ || phase_ != ReactPhase::Idle) return;
 
     knowledgeBase_ = LaviContext::Get().knowledgeBase; // KnowledgeSystem が公開した共有を参照
     actionPipeline_ = LaviContext::Get().actionPipeline; // ActionSystem が公開した共有を参照
@@ -196,36 +196,16 @@ void GatekeeperManager::Dispatch(const RouteDecision& dec, double now) {
         // ローカル LLM（MemoryPanel の共有インスタンス）で生成。<think> 除去・/no_think は LocalLLM 側で処理。
         reactMessages_ = { {"user", prompt} };
         reactSystemPrompt_ = systemPrompt;
+        // ローカルは [search:] タグでモデル主導の Web 検索を行う。指示を reactSystemPrompt_ に含めることで、
+        // 継続ラウンド（observe→re-plan）でも [search:] を出せる。検索の実行は observe ワーカーが担う
+        // （独自の 1 回限り検索 async は廃止し、ReAct ループに一本化）。
         const bool toolEnabled = config_.useWebContext && webSearch_ && webSearch_->IsEnabled();
         if (toolEnabled) {
-            // モデル主導の tool use: モデルが [search:...] を出したら検索→結果を戻して再生成。
-            // Web 取得はブロッキングのため生成ごとバックグラウンドスレッドで実行する。
-            const std::string baseSp     = systemPrompt;
-            const std::string userPrompt = prompt;
-            localFuture_ = std::async(std::launch::async, [this, baseSp, userPrompt]() {
-                const std::string sp = baseSp + "\n\n" + WebSearchClient::ToolPrompt();
-                std::vector<LocalChatMessage> r1 = { {"user", userPrompt} };
-                std::string out = localLLM_->GenerateChatStreamAsync(sp, r1, nullptr).get();
-
-                const std::string q = WebSearchClient::ParseSearchQuery(out);
-                if (!q.empty()) {
-                    const std::string results = webSearch_->BuildContext(q);
-                    const std::string feedback = results.empty()
-                        ? std::string("（検索結果は取得できませんでした。手持ちの知識で簡潔に答えてください。）")
-                        : (results + "\n上記の検索結果を踏まえて、ユーザーに自然な口調で回答してください。");
-                    std::vector<LocalChatMessage> r2 = {
-                        { "user", userPrompt },
-                        { "assistant", out },
-                        { "user", feedback },
-                    };
-                    out = localLLM_->GenerateChatStreamAsync(sp, r2, nullptr).get();
-                }
-                return WebSearchClient::StripSearchTags(out);
-            });
-        } else {
-            localFuture_ = localLLM_->GenerateChatStreamAsync(reactSystemPrompt_, reactMessages_, nullptr);
+            reactSystemPrompt_ += "\n\n";
+            reactSystemPrompt_ += WebSearchClient::ToolPrompt();
         }
-        llmBusy_      = true;
+        localFuture_  = localLLM_->GenerateChatStreamAsync(reactSystemPrompt_, reactMessages_, nullptr);
+        phase_        = ReactPhase::LlmBusy;
         lastEscalate_ = now;
         return;
     }
@@ -248,28 +228,45 @@ void GatekeeperManager::Dispatch(const RouteDecision& dec, double now) {
     llm_.AddMessage("user", prompt);
 
     llmFuture_ = llm_.SendAsync();
-    llmBusy_ = true;
+    phase_ = ReactPhase::LlmBusy;
     lastEscalate_ = now;
 }
 
 void GatekeeperManager::PollLlm() {
-    if (!llmBusy_) return;
+    if (phase_ == ReactPhase::Idle) return;
 
+    // ツール実行(observe)中: ワーカーの結果が出たら再思考 or 確定へ。
+    // ここでは共有ポインタを書き換えない（observe ワーカーが読み取り中のため＝データ競合回避）。
+    if (phase_ == ReactPhase::ToolBusy) {
+        if (!observeFuture_.valid()) { // 安全網（通常は到達しない）
+            ResetReactState();
+            return;
+        }
+        if (observeFuture_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+        std::string observation;
+        try {
+            observation = observeFuture_.get();
+        } catch (...) {
+            // ワーカー側で畳めなかった想定外例外。ターンを安全に終了し Idle へ戻す（無発話）。
+            ResetReactState();
+            return;
+        }
+        if (!ContinueReactLoop(reactLastContent_, observation)) {
+            FinalizeLlmResponse(reactLastContent_);
+        }
+        return;
+    }
+
+    // ここから phase_ == LlmBusy: LLM 生成の完了回収。
+    // observe ワーカーへ渡す共有ポインタは、起動直前のこのタイミングで確定させる（ToolBusy 中は触れない）。
     actionPipeline_ = LaviContext::Get().actionPipeline; // ActionSystem が公開した共有を参照（応答完了時に実行）
     longTermMemory_ = LaviContext::Get().longTermMemory; // MemoryPanel が公開した共有を参照（Webアクションの記憶反映に使用）
-
     // ローカル LLM の完了
     if (localFuture_.valid()) {
         if (localFuture_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
-        std::string content = localFuture_.get();
-        llmBusy_ = false;
+        const std::string content = localFuture_.get();
         lastResponse_ = content;
-        if (!content.empty()) {
-            const std::string observation = reactForceFinal_ ? std::string{} : ExecuteTaggedToolsAndBuildObservation(content);
-            if (!ContinueReactLoop(content, observation)) {
-                FinalizeLlmResponse(content);
-            }
-        }
+        BeginObserveOrFinalize(content);
         return;
     }
 
@@ -278,16 +275,48 @@ void GatekeeperManager::PollLlm() {
     if (llmFuture_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
 
     LLMResponse resp = llmFuture_.get();
-    llmBusy_ = false;
     lastResponse_ = resp.success ? resp.content : ("[Error] " + resp.error);
     if (resp.success) {
-        const std::string observation = reactForceFinal_ ? std::string{} : ExecuteTaggedToolsAndBuildObservation(resp.content);
-        if (!ContinueReactLoop(resp.content, observation)) {
-            FinalizeLlmResponse(resp.content);
-        }
+        BeginObserveOrFinalize(resp.content);
     } else {
         ResetReactState();
     }
+}
+
+bool GatekeeperManager::HasToolTags(const std::string& content) const {
+    return content.find("[search:") != std::string::npos
+        || content.find("[action:") != std::string::npos
+        || content.find("[browser:") != std::string::npos;
+}
+
+void GatekeeperManager::BeginObserveOrFinalize(const std::string& content) {
+    if (content.empty()) {
+        ResetReactState();
+        return;
+    }
+    // 最終確定指示、または行動タグ無し → ツール実行せずに確定（通常会話は 1 ターンで完結）。
+    if (reactForceFinal_ || !HasToolTags(content)) {
+        FinalizeLlmResponse(content);
+        return;
+    }
+    // ツール実行は BuildContext のブロッキング HTTP を含むためワーカーで実行する。
+    // 完了は次フレーム以降の ToolBusy 分岐で回収する（メインスレッドを止めない）。
+    reactLastContent_ = content;
+    // [browser:] の「サービス既定ブラウザ」解決は LongTermMemory を読むため、ワーカー起動前に
+    // メインスレッドで先解決する（AppUsageTracker 等のメイン側書き込みとの競合を回避）。
+    const std::vector<ResolvedWebAction> resolvedBrowser =
+        ResolveWebActions(ParseWebActions(content), longTermMemory_);
+    observeFuture_ = std::async(std::launch::async, [this, content, resolvedBrowser]() -> std::string {
+        // 異常系の畳み: 例外を観測テキストに変換し、ReAct が次手で対処できるようにする（クラッシュさせない）。
+        try {
+            return ExecuteTaggedToolsAndBuildObservation(content, resolvedBrowser);
+        } catch (const std::exception& e) {
+            return std::string("Tool execution failed: ") + e.what();
+        } catch (...) {
+            return std::string("Tool execution failed: unknown error");
+        }
+    });
+    phase_ = ReactPhase::ToolBusy;
 }
 
 std::string GatekeeperManager::BuildReactSystemPrompt(const std::string& basePrompt) const {
@@ -324,14 +353,31 @@ std::string GatekeeperManager::BuildRecentDecisionContext() const {
     return os.str();
 }
 
-std::string GatekeeperManager::ExecuteTaggedToolsAndBuildObservation(const std::string& content) {
+// 注意: この関数は observe ワーカースレッドから呼ばれる（BuildContext のブロッキング HTTP を含むため）。
+// ctx_/ECS や LongTermMemory には触れない。ブラウザ操作はメインで先解決済みの resolvedBrowser を使い、
+// 検索(webSearch_ は const)とアクション(actionPipeline_ はターン中ワーカー専有)のみ共有ポインタを使う。
+// 実行順は 検索 → ブラウザ → アクション（情報取得を先に行ってから副作用を起こす）。
+std::string GatekeeperManager::ExecuteTaggedToolsAndBuildObservation(const std::string& content,
+                                                                     const std::vector<ResolvedWebAction>& resolvedBrowser) {
     std::ostringstream obs;
 
-    const auto webActions = ParseWebActions(content);
-    if (!webActions.empty()) {
-        ExecuteWebActions(webActions, longTermMemory_);
+    // [search: キーワード] : Web 検索を実行して結果を観測に積む（空振りは別語での再検索を促す）。
+    const std::string searchQuery = WebSearchClient::ParseSearchQuery(content);
+    if (!searchQuery.empty() && webSearch_ && webSearch_->IsEnabled()) {
+        const std::string results = webSearch_->BuildContext(searchQuery); // ブロッキング HTTP（ワーカー上）
+        obs << "Web search results for \"" << searchQuery << "\":\n";
+        if (results.empty()) {
+            obs << "- (no results found; try a different query, or answer from your own knowledge)\n";
+        } else {
+            obs << results << "\n";
+        }
+    }
+
+    // [browser:URL] : メインで先解決済み（LTM 非参照）。開く処理のみワーカーで実行する。
+    if (!resolvedBrowser.empty()) {
+        ExecuteResolvedWebActions(resolvedBrowser);
         obs << "Browser actions executed:\n";
-        for (const auto& action : webActions) {
+        for (const auto& action : resolvedBrowser) {
             obs << "- opened " << action.url << "\n";
         }
     }
@@ -369,7 +415,7 @@ bool GatekeeperManager::ContinueReactLoop(const std::string& content, const std:
     if (reactIteration_ >= maxIterations) {
         reactMessages_.push_back({
             "user",
-            observation + "\nReAct iteration limit reached. Give the user a concise final answer without any [action:] or [browser:] tags."
+            observation + "\nReAct iteration limit reached. Give the user a concise final answer without any [search:], [action:], or [browser:] tags."
         });
         if (reactUseLocal_) {
             if (!localLLM_ || !localLLM_->IsModelLoaded()) {
@@ -378,17 +424,17 @@ bool GatekeeperManager::ContinueReactLoop(const std::string& content, const std:
             }
             localFuture_ = localLLM_->GenerateChatStreamAsync(reactSystemPrompt_, reactMessages_, nullptr);
         } else {
-            llm_.AddMessage("user", observation + "\nReAct iteration limit reached. Give the user a concise final answer without any [action:] or [browser:] tags.");
+            llm_.AddMessage("user", observation + "\nReAct iteration limit reached. Give the user a concise final answer without any [search:], [action:], or [browser:] tags.");
             llmFuture_ = llm_.SendAsync();
         }
-        llmBusy_ = true;
+        phase_ = ReactPhase::LlmBusy;
         reactForceFinal_ = true;
         return true;
     }
 
     const std::string feedback =
         observation +
-        "\nBased on this observation, either choose the next [action:] or [browser:] tag, or finish with a natural final response without tool tags.";
+        "\nBased on this observation, either choose the next [search:], [action:], or [browser:] tag, or finish with a natural final response without tool tags.";
 
     if (reactUseLocal_) {
         if (!localLLM_ || !localLLM_->IsModelLoaded()) {
@@ -402,17 +448,19 @@ bool GatekeeperManager::ContinueReactLoop(const std::string& content, const std:
         llmFuture_ = llm_.SendAsync();
     }
 
-    llmBusy_ = true;
+    phase_ = ReactPhase::LlmBusy;
     return true;
 }
 
 void GatekeeperManager::FinalizeLlmResponse(const std::string& content) {
+    // [search:] は observe で消費するが、最終テキスト（記録・発話）にタグ痕が残らないよう除去する。
     if (ctx_ && ctx_->conversationMemory) {
         ctx_->conversationMemory->PushMessage(
-            "assistant", StripEmotionTag(ActionPipeline::StripActionTags(StripWebActions(content))));
+            "assistant",
+            StripEmotionTag(ActionPipeline::StripActionTags(StripWebActions(WebSearchClient::StripSearchTags(content)))));
     }
     if (config_.autoSpeak) {
-        Speak(ActionPipeline::StripActionTags(StripWebActions(content)));
+        Speak(ActionPipeline::StripActionTags(StripWebActions(WebSearchClient::StripSearchTags(content))));
     }
     ResetReactState();
 }
@@ -424,6 +472,7 @@ void GatekeeperManager::ResetReactState() {
     reactIteration_ = 0;
     reactSystemPrompt_.clear();
     reactMessages_.clear();
+    phase_ = ReactPhase::Idle; // ループ終了＝アイドルへ（直列化の単一の真実）
 }
 
 void GatekeeperManager::SpeakProactive(const std::string& content) {
@@ -458,7 +507,7 @@ void GatekeeperManager::Speak(const std::string& text) {
 }
 
 void GatekeeperManager::EscalateLatest() {
-    if (decisions_.empty() || llmBusy_) return;
+    if (decisions_.empty() || phase_ != ReactPhase::Idle) return;
     auto& dec = decisions_.back();
     double now = NowSec();
 
@@ -467,7 +516,7 @@ void GatekeeperManager::EscalateLatest() {
 }
 
 void GatekeeperManager::RespondToSpeech() {
-    if (!ctx_ || ctx_->transcribedText.empty() || llmBusy_) return;
+    if (!ctx_ || ctx_->transcribedText.empty() || phase_ != ReactPhase::Idle) return;
     double now = NowSec();
 
     // 発話区間検出で確定した発話なので、キーワード/クールダウンは課さず会話として応答する

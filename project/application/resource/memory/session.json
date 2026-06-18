@@ -1,7 +1,12 @@
 {
   "summary":"",
-  "totalMessages":0,
+  "totalMessages":5,
   "summarizedCount":0,
   "entries":[
+    {"role":"user","content":"うん。","hasImage":false},
+    {"role":"assistant","content":" 「んー、それについては、もう一度詳しく説明してあげましょう。」","hasImage":false},
+    {"role":"user","content":"ヨルシカは日本語の会話です。 固有名詞。","hasImage":false},
+    {"role":"user","content":"ヨルシカは日本語の曲です。固有名詞。","hasImage":false},
+    {"role":"assistant","content":" 「わあ、あなたがそう言ってくれるなんて。僕も、嬉しいです。」","hasImage":false}
   ]
 }

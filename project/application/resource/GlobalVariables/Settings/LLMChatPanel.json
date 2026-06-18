@@ -1,6 +1,6 @@
 {
     "LLMChatPanel": {
-        "AttachAppInfo": false,
+        "AttachAppInfo": true,
         "AutoObserve": false,
         "AutoObserveInterval": 10.0,
         "AutoObserveScreen": false,
@@ -8,9 +8,9 @@
         "EnableWebSearch": false,
         "LocalEnableThinking": false,
         "PlayFiller": true,
-        "SpeakResponse": false,
+        "SpeakResponse": true,
         "UseKnowledgeBase": true,
-        "UseLocalLLM": false,
+        "UseLocalLLM": true,
         "UseMemoryContext": true,
         "UseWhisper": true
     }

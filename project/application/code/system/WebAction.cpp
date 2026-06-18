@@ -201,7 +201,9 @@ std::string StripWebActions(const std::string& text) {
     return result;
 }
 
-void ExecuteWebActions(const std::vector<WebAction>& actions, LongTermMemory* memory) {
+std::vector<ResolvedWebAction> ResolveWebActions(const std::vector<WebAction>& actions, LongTermMemory* memory) {
+    std::vector<ResolvedWebAction> resolved;
+    resolved.reserve(actions.size());
     for (const auto& a : actions) {
         std::wstring browserExe;
 
@@ -216,8 +218,20 @@ void ExecuteWebActions(const std::vector<WebAction>& actions, LongTermMemory* me
             }
         }
 
-        OpenUrl(a.url, browserExe);
+        resolved.push_back({a.url, std::move(browserExe)});
     }
+    return resolved;
+}
+
+void ExecuteResolvedWebActions(const std::vector<ResolvedWebAction>& resolved) {
+    for (const auto& r : resolved) {
+        OpenUrl(r.url, r.browserExe);
+    }
+}
+
+void ExecuteWebActions(const std::vector<WebAction>& actions, LongTermMemory* memory) {
+    // 解決(LTM参照)と実行を分離した上で従来どおり一括実行する（既存呼び出し元の挙動は不変）。
+    ExecuteResolvedWebActions(ResolveWebActions(actions, memory));
 }
 
 // --- ローカルアクション ---

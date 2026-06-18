@@ -10,6 +10,7 @@
 #include "MicGatekeeper.h"
 #include "LLMClient.h"
 #include "LocalLLM.h"
+#include "WebAction.h" // ResolvedWebAction（observe ワーカーへ先解決済みブラウザ操作を渡す）
 
 #include <future>
 
@@ -20,6 +21,10 @@ class WebSearchClient;
 class ActionPipeline;
 
 enum class GateSource { Camera, Screen, Mic };
+
+// ReAct ループの実行フェーズ。LLM 生成中とツール実行(observe)中を相互排他で表し、
+// いずれの非 Idle 状態でも新しい発話ターンを弾く（直列化をツール実行にも及ぼす）。
+enum class ReactPhase { Idle, LlmBusy, ToolBusy };
 
 // 各 GK が発火した 1 件の出来事
 struct GateEvent {
@@ -123,7 +128,8 @@ public:
     // 安全のためアクション（[action:]/[browser:]）は実行しない（自発観察での暴発防止）。
     void SpeakProactive(const std::string& content);
 
-    bool LlmBusy() const { return llmBusy_; }
+    // LLM 生成中・ツール実行中のいずれも busy として返す（ターン直列化の単一判定）。
+    bool LlmBusy() const { return phase_ != ReactPhase::Idle; }
     const std::string& LastResponse() const { return lastResponse_; }
 
     static const char* SourceName(GateSource s);
@@ -141,10 +147,17 @@ private:
     void Speak(const std::string& text);
     std::string BuildReactSystemPrompt(const std::string& basePrompt) const;
     std::string BuildRecentDecisionContext() const;
-    std::string ExecuteTaggedToolsAndBuildObservation(const std::string& content);
+    // observe ワーカー本体。ブラウザ操作は LTM 競合回避のためメインで先解決済みのものを受け取る。
+    std::string ExecuteTaggedToolsAndBuildObservation(const std::string& content,
+                                                      const std::vector<ResolvedWebAction>& resolvedBrowser);
     bool ContinueReactLoop(const std::string& content, const std::string& observation);
     void FinalizeLlmResponse(const std::string& content);
     void ResetReactState();
+
+    // ツール実行タグ([search:]/[action:]/[browser:])が含まれるかの軽量判定（メインスレッドで実行）。
+    bool HasToolTags(const std::string& content) const;
+    // LLM 応答を受けて、ツール実行(observe)をワーカーで起動するか、最終確定するかを振り分ける。
+    void BeginObserveOrFinalize(const std::string& content);
 
     SharedMediaContext* ctx_ = nullptr;
 
@@ -161,7 +174,8 @@ private:
     std::future<LLMResponse> llmFuture_;
     LocalLLM* localLLM_ = nullptr;           // ローカル (共有インスタンス。所有しない)
     std::future<std::string> localFuture_;
-    bool llmBusy_ = false;
+    std::future<std::string> observeFuture_; // ツール実行(observe)をワーカーで回す。完了は ToolBusy で回収
+    ReactPhase phase_ = ReactPhase::Idle; // LLM 生成中 / ツール実行中 を表す状態機械
     std::string lastResponse_;
     double lastEscalate_ = -1.0e9;
     bool reactActive_ = false;
@@ -170,6 +184,7 @@ private:
     int reactIteration_ = 0;
     std::string reactSystemPrompt_;
     std::vector<LocalChatMessage> reactMessages_;
+    std::string reactLastContent_; // observe 起動時の LLM 応答（ToolBusy 完了時に ContinueReactLoop へ渡す）
     LongTermMemory* longTermMemory_ = nullptr;
     KnowledgeBase* knowledgeBase_ = nullptr;  // 知識ベース RAG（共有。KnowledgeSystem 公開。入口で LaviContext から引く）
     WebSearchClient* webSearch_ = nullptr;    // Web 検索（時事対策。共有インスタンス。所有しない）
