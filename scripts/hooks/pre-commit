@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Meaning Architecture v2 — confidence 契約 (C1–C4) pre-commit ゲート
+#
+# 正は docs/meaning-architecture/CONSTITUTION.md §2。矛盾したら CONSTITUTION を見よ。
+# このフックは scripts/check_confidence_contract.py を走らせ、違反があれば commit を止める。
+# 安全と判断した行は当該行末に  // CONF-OK: 理由  を付ければ除外される。
+# どうしても緊急で通したいときは  git commit --no-verify  （判断の責任は commit 者）。
+#
+# 有効化（リポジトリごとに一度）:  git config core.hooksPath scripts/hooks
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+checker="$repo_root/scripts/check_confidence_contract.py"
+
+if [ ! -f "$checker" ]; then
+    echo "pre-commit: checker が見つからない ($checker)。スキップ。" >&2
+    exit 0
+fi
+
+if ! python3 "$checker" "$repo_root/project/application/code"; then
+    echo "" >&2
+    echo "commit blocked: confidence 契約違反 (C1–C4)。" >&2
+    echo "  → 修正するか、安全なら該当行末に  // CONF-OK: 理由  を付与。" >&2
+    echo "  → 緊急時のみ  git commit --no-verify。正は CONSTITUTION.md §2。" >&2
+    exit 1
+fi
