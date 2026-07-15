@@ -69,3 +69,4 @@ project/imgui.ini
 /project/application/resource/memory/conversation_eval.jsonl
 /.claude
 *.log
+/.serena
