@@ -63,3 +63,9 @@ Thumbs.db
 /project/application/resource/whisper
 project/imgui.ini
 *.onnx
+
+# 会話品質評価ハーネスの生成物（append-onlyログ。コミットしない）
+/project/application/resource/memory/conversation_turns.jsonl
+/project/application/resource/memory/conversation_eval.jsonl
+/.claude
+*.log
